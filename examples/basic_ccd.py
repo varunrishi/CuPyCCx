@@ -15,10 +15,17 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "python"))
 from cupyccx.method import CCD, LCCD, CCOptions
 
 # ------------------------------------------------------------------
-# H2 STO-3G spin-orbital integrals (hand-coded, 2 occ + 2 vir)
+# H2 / STO-3G spin-orbital integrals from PySCF (R = 1.4 bohr)
+# Spin-orbital ordering: 0=occ_α, 1=occ_β, 2=vir_α, 3=vir_β
+#
+# Reference energies (PySCF):
+#   E_corr(MP2)  = -0.01315787 Ha
+#   E_corr(CCSD) = -0.02056178 Ha
+# cupyccx solver:
+#   E_corr(LCCD) = -0.03288443 Ha
+#   E_corr(CCD)  = -0.02141095 Ha
 # ------------------------------------------------------------------
-eps_occ, eps_vir = -0.57827, 0.67012
-K   = 0.20636  # (occ|vir) exchange integral
+eps_occ, eps_vir = -0.57820298, 0.67026777
 
 n_occ, n_vir = 2, 2
 n_mo = n_occ + n_vir
@@ -27,11 +34,32 @@ eps  = np.array([eps_occ, eps_occ, eps_vir, eps_vir])
 fock = np.diag(eps)
 
 eri  = np.zeros((n_mo, n_mo, n_mo, n_mo))
-# Antisymmetrized <pq||rs> for the (occ,occ,vir,vir) block
-eri[0,1,2,3] =  K;  eri[1,0,3,2] =  K
-eri[0,1,3,2] = -K;  eri[1,0,2,3] = -K
-eri[2,3,0,1] =  K;  eri[3,2,1,0] =  K
-eri[3,2,0,1] = -K;  eri[2,3,1,0] = -K
+# OOOO
+eri[0,1,0,1] =  0.67459408; eri[0,1,1,0] = -0.67459408
+eri[1,0,0,1] = -0.67459408; eri[1,0,1,0] =  0.67459408
+# OOVV + VVOO
+eri[0,1,2,3] =  0.18125791; eri[0,1,3,2] = -0.18125791
+eri[1,0,2,3] = -0.18125791; eri[1,0,3,2] =  0.18125791
+eri[2,3,0,1] =  0.18125791; eri[2,3,1,0] = -0.18125791
+eri[3,2,0,1] = -0.18125791; eri[3,2,1,0] =  0.18125791
+# OVOV same-spin
+eri[0,2,0,2] =  0.48230608; eri[0,2,2,0] = -0.48230608
+eri[2,0,0,2] = -0.48230608; eri[2,0,2,0] =  0.48230608
+eri[1,3,1,3] =  0.48230608; eri[1,3,3,1] = -0.48230608
+eri[3,1,1,3] = -0.48230608; eri[3,1,3,1] =  0.48230608
+# OVOV opposite-spin
+eri[0,3,0,3] =  0.66356399; eri[0,3,3,0] = -0.66356399
+eri[3,0,0,3] = -0.66356399; eri[3,0,3,0] =  0.66356399
+eri[1,2,1,2] =  0.66356399; eri[1,2,2,1] = -0.66356399
+eri[2,1,1,2] = -0.66356399; eri[2,1,2,1] =  0.66356399
+# OVOV opposite-spin cross terms
+eri[0,3,1,2] = -0.18125791; eri[0,3,2,1] =  0.18125791
+eri[3,0,1,2] =  0.18125791; eri[3,0,2,1] = -0.18125791
+eri[1,2,0,3] = -0.18125791; eri[1,2,3,0] =  0.18125791
+eri[2,1,0,3] =  0.18125791; eri[2,1,3,0] = -0.18125791
+# VVVV
+eri[2,3,2,3] =  0.69749535; eri[2,3,3,2] = -0.69749535
+eri[3,2,2,3] = -0.69749535; eri[3,2,3,2] =  0.69749535
 
 # ------------------------------------------------------------------
 # Run LCCD
