@@ -20,8 +20,8 @@ dependencies = [
 dev = ["pytest>=7", "pytest-cov"]
 
 [project.urls]
-Homepage   = "https://github.com/yourorg/cupyccx"
-Repository = "https://github.com/yourorg/cupyccx"
+Homepage   = "https://github.com/varunrishi/cupyccx"
+Repository = "https://github.com/varunrishi/cupyccx"
 
 # ---------------------------------------------------------------------------
 # scikit-build-core passes CMake settings from here

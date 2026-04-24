@@ -14,21 +14,45 @@ import pytest
 
 def h2_sto3g_data():
     """
-    Minimal 2-orbital / 2-electron spin-orbital dataset for STO-3G H2.
-    n_occ=2, n_vir=2, n_mo=4.
-    """
-    eps_occ, eps_vir = -0.57827, 0.67012
-    K = 0.20636  # spatial (occ|vir) exchange integral
+    Complete spin-orbital dataset for H2/STO-3G at R=1.4 bohr (PySCF reference).
+    Spin-orbital ordering: 0=occ_α, 1=occ_β, 2=vir_α, 3=vir_β.
 
+    Reference energies:
+      E_corr(MP2)  = -0.01315787 Ha  (= LCCD for 2 electrons)
+      E_corr(CCSD) = -0.02056178 Ha  (= CCD for 2 electrons)
+    """
+    eps_occ, eps_vir = -0.57820298, 0.67026777
     eps  = np.array([eps_occ, eps_occ, eps_vir, eps_vir])
     fock = np.diag(eps)
 
     n_mo = 4
     eri = np.zeros((n_mo, n_mo, n_mo, n_mo))
-    eri[0,1,2,3] =  K;  eri[1,0,3,2] =  K
-    eri[0,1,3,2] = -K;  eri[1,0,2,3] = -K
-    eri[2,3,0,1] =  K;  eri[3,2,1,0] =  K
-    eri[3,2,0,1] = -K;  eri[2,3,1,0] = -K
+    # OOOO
+    eri[0,1,0,1] =  0.67459408; eri[0,1,1,0] = -0.67459408
+    eri[1,0,0,1] = -0.67459408; eri[1,0,1,0] =  0.67459408
+    # OOVV + VVOO
+    eri[0,1,2,3] =  0.18125791; eri[0,1,3,2] = -0.18125791
+    eri[1,0,2,3] = -0.18125791; eri[1,0,3,2] =  0.18125791
+    eri[2,3,0,1] =  0.18125791; eri[2,3,1,0] = -0.18125791
+    eri[3,2,0,1] = -0.18125791; eri[3,2,1,0] =  0.18125791
+    # OVOV same-spin
+    eri[0,2,0,2] =  0.48230608; eri[0,2,2,0] = -0.48230608
+    eri[2,0,0,2] = -0.48230608; eri[2,0,2,0] =  0.48230608
+    eri[1,3,1,3] =  0.48230608; eri[1,3,3,1] = -0.48230608
+    eri[3,1,1,3] = -0.48230608; eri[3,1,3,1] =  0.48230608
+    # OVOV opposite-spin
+    eri[0,3,0,3] =  0.66356399; eri[0,3,3,0] = -0.66356399
+    eri[3,0,0,3] = -0.66356399; eri[3,0,3,0] =  0.66356399
+    eri[1,2,1,2] =  0.66356399; eri[1,2,2,1] = -0.66356399
+    eri[2,1,1,2] = -0.66356399; eri[2,1,2,1] =  0.66356399
+    # OVOV opposite-spin cross terms
+    eri[0,3,1,2] = -0.18125791; eri[0,3,2,1] =  0.18125791
+    eri[3,0,1,2] =  0.18125791; eri[3,0,2,1] = -0.18125791
+    eri[1,2,0,3] = -0.18125791; eri[1,2,3,0] =  0.18125791
+    eri[2,1,0,3] =  0.18125791; eri[2,1,3,0] = -0.18125791
+    # VVVV
+    eri[2,3,2,3] =  0.69749535; eri[2,3,3,2] = -0.69749535
+    eri[3,2,2,3] = -0.69749535; eri[3,2,3,2] =  0.69749535
 
     return dict(n_occ=2, n_vir=2, eps=eps, fock=fock, eri=eri)
 
@@ -75,7 +99,7 @@ def test_run_ccd_converges():
                 opts=opts._to_ext())
     assert r.converged
     assert r.e_corr < 0
-    assert abs(r.e_corr - (-0.04222)) < 5e-4
+    assert abs(r.e_corr - (-0.02141095)) < 1e-6
 
 
 @skip_no_ext

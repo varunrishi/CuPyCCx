@@ -4,22 +4,21 @@
 #include <cmath>
 
 // ---------------------------------------------------------------------------
-// Build a tiny H2 / minimal-basis SCFData by hand for deterministic tests.
-// Numbers match the analytic STO-3G H2 result at R=1.4 bohr.
+// Build the exact H2 / STO-3G spin-orbital SCFData from PySCF.
+// Geometry: H-H at R = 1.4 bohr.
 //
-// STO-3G H2:  n_occ=2 (alpha+beta), n_vir=2, n_mo=4
-// Orbital energies: eps = {-0.5780, -0.5780, +0.6702, +0.6702}   (spin-orb)
-// Reference CCD correlation energy: -0.04222... Ha  (MP2 limit for 2e)
+// Spin-orbital ordering: 0 = occ_α, 1 = occ_β, 2 = vir_α, 3 = vir_β
+//
+// Reference energies (PySCF):
+//   E_corr(MP2)  = -0.01315787 Ha
+//   E_corr(CCSD) = -0.02056178 Ha   (= CCD for a 2-electron system)
 // ---------------------------------------------------------------------------
 
 namespace {
 
 cupyccx::SCFData make_h2_scf() {
-    // Minimal model: 1 occupied spatial orbital, 1 virtual => 2 spin-orbs each
-    // eps (spatial): occ=-0.5780, vir=+0.6702
-    // For spin-orbitals: alpha/beta are degenerate
-    const double eps_occ = -0.57827;
-    const double eps_vir =  0.67012;
+    const double eps_occ = -0.57820298;
+    const double eps_vir =  0.67026777;
     const int n_occ = 2, n_vir = 2, n_mo = 4;
 
     cupyccx::SCFData scf;
@@ -33,33 +32,50 @@ cupyccx::SCFData make_h2_scf() {
     scf.fock(0,0) = eps_occ; scf.fock(1,1) = eps_occ;
     scf.fock(2,2) = eps_vir; scf.fock(3,3) = eps_vir;
 
-    // Two-electron integrals — use the unique value for H2 STO-3G
-    // <alpha_occ, beta_occ | alpha_vir, beta_vir> (chemist) = 0.20636
-    // Antisymmetrized <pq||rs> = <pq|rs> - <pq|sr>
-    const double K = 0.20636;  // spatial exchange integral
+    // Complete antisymmetrized spin-orbital ERIs <pq||rs> from PySCF.
+    // Spin-orbital index: 0=(occ,α) 1=(occ,β) 2=(vir,α) 3=(vir,β)
     scf.eri_antisym = cupyccx::Tensor4(n_mo, n_mo, n_mo, n_mo);
 
-    // Fill the occ-occ-vir-vir block (p=0,1 occ; r,s=2,3 vir)
-    // In spin-orbital physicist notation:
-    //   <0 1 || 2 3> = +K  (alpha_occ beta_occ || alpha_vir beta_vir)
-    //   <1 0 || 3 2> = +K
-    //   <0 1 || 3 2> = -K  (exchanged last two)
-    //   <1 0 || 2 3> = -K
-    // and hermitian conjugates
-    scf.eri_antisym(0,1,2,3) =  K;
-    scf.eri_antisym(1,0,3,2) =  K;
-    scf.eri_antisym(0,1,3,2) = -K;
-    scf.eri_antisym(1,0,2,3) = -K;
-    // conjugates
-    scf.eri_antisym(2,3,0,1) =  K;
-    scf.eri_antisym(3,2,1,0) =  K;
-    scf.eri_antisym(3,2,0,1) = -K;
-    scf.eri_antisym(2,3,1,0) = -K;
+    // OOOO block
+    scf.eri_antisym(0,1,0,1) =  0.67459408; scf.eri_antisym(0,1,1,0) = -0.67459408;
+    scf.eri_antisym(1,0,0,1) = -0.67459408; scf.eri_antisym(1,0,1,0) =  0.67459408;
+
+    // OOVV block
+    scf.eri_antisym(0,1,2,3) =  0.18125791; scf.eri_antisym(0,1,3,2) = -0.18125791;
+    scf.eri_antisym(1,0,2,3) = -0.18125791; scf.eri_antisym(1,0,3,2) =  0.18125791;
+    // VVOO (hermitian conjugates)
+    scf.eri_antisym(2,3,0,1) =  0.18125791; scf.eri_antisym(2,3,1,0) = -0.18125791;
+    scf.eri_antisym(3,2,0,1) = -0.18125791; scf.eri_antisym(3,2,1,0) =  0.18125791;
+
+    // OVOV block (same-spin pairs)
+    scf.eri_antisym(0,2,0,2) =  0.48230608; scf.eri_antisym(0,2,2,0) = -0.48230608;
+    scf.eri_antisym(2,0,0,2) = -0.48230608; scf.eri_antisym(2,0,2,0) =  0.48230608;
+    scf.eri_antisym(1,3,1,3) =  0.48230608; scf.eri_antisym(1,3,3,1) = -0.48230608;
+    scf.eri_antisym(3,1,1,3) = -0.48230608; scf.eri_antisym(3,1,3,1) =  0.48230608;
+
+    // OVOV block (opposite-spin pairs)
+    scf.eri_antisym(0,3,0,3) =  0.66356399; scf.eri_antisym(0,3,3,0) = -0.66356399;
+    scf.eri_antisym(3,0,0,3) = -0.66356399; scf.eri_antisym(3,0,3,0) =  0.66356399;
+    scf.eri_antisym(1,2,1,2) =  0.66356399; scf.eri_antisym(1,2,2,1) = -0.66356399;
+    scf.eri_antisym(2,1,1,2) = -0.66356399; scf.eri_antisym(2,1,2,1) =  0.66356399;
+
+    // OVOV opposite-spin cross terms (mix occ/vir α and β)
+    scf.eri_antisym(0,3,1,2) = -0.18125791; scf.eri_antisym(0,3,2,1) =  0.18125791;
+    scf.eri_antisym(3,0,1,2) =  0.18125791; scf.eri_antisym(3,0,2,1) = -0.18125791;
+    scf.eri_antisym(1,2,0,3) = -0.18125791; scf.eri_antisym(1,2,3,0) =  0.18125791;
+    scf.eri_antisym(2,1,0,3) =  0.18125791; scf.eri_antisym(2,1,3,0) = -0.18125791;
+
+    // VVVV block
+    scf.eri_antisym(2,3,2,3) =  0.69749535; scf.eri_antisym(2,3,3,2) = -0.69749535;
+    scf.eri_antisym(3,2,2,3) = -0.69749535; scf.eri_antisym(3,2,3,2) =  0.69749535;
 
     return scf;
 }
 
 }  // namespace
+
+// Reference energies (PySCF, H2/STO-3G, R=1.4 bohr)
+const double E_MP2_REF  = -0.01315787;  // PySCF MP2, H2/STO-3G R=1.4 bohr
 
 TEST(Integrals, ValidateSCF) {
     auto scf = make_h2_scf();
@@ -83,8 +99,7 @@ TEST(Integrals, SliceOOVV_Antisymmetry) {
 TEST(Integrals, DenominatorSign) {
     auto scf = make_h2_scf();
     auto D2  = cupyccx::make_D2(scf);
-    // For any occ-occ-vir-vir element, eps_i + eps_j < eps_a + eps_b
-    // => D_{ij}^{ab} < 0
+    // For any occ-occ-vir-vir element, eps_i + eps_j < eps_a + eps_b => D < 0
     for (std::size_t n = 0; n < D2.data.size(); ++n)
         EXPECT_LT(D2.data[n], 0.0);
 }
@@ -100,6 +115,5 @@ TEST(Integrals, MP2Energy) {
         e_mp2 += oovv.data[n] * oovv.data[n] / D2.data[n];
     e_mp2 *= 0.25;
 
-    // For 2-electron systems, MP2 == FCI correlation energy in this basis
-    EXPECT_NEAR(e_mp2, -0.04222, 5e-4);
+    EXPECT_NEAR(e_mp2, E_MP2_REF, 1e-6);
 }
