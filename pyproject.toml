@@ -1,0 +1,54 @@
+[build-system]
+requires = ["scikit-build-core>=0.9", "pybind11>=2.12"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "cupyccx"
+version = "0.1"
+description = "Coupled Cluster Doubles (CCD/LCCD) with C++/CUDA acceleration and PySCF interface"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.9"
+authors = [{ name = "Varun Rishi" }]
+
+dependencies = [
+    "numpy>=1.22",
+    "pyscf>=2.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7", "pytest-cov"]
+
+[project.urls]
+Homepage   = "https://github.com/yourorg/cupyccx"
+Repository = "https://github.com/yourorg/cupyccx"
+
+# ---------------------------------------------------------------------------
+# scikit-build-core passes CMake settings from here
+# ---------------------------------------------------------------------------
+[tool.scikit-build]
+cmake.build-type = "Release"
+cmake.args       = []
+
+[tool.scikit-build.cmake.define]
+CUPYCCX_BUILD_TESTS  = "OFF"   # tests not needed during wheel build
+CUPYCCX_BUILD_PYTHON = "ON"
+# To enable CUDA when building the wheel:
+#   pip install . -C cmake.define.CUPYCCX_CUDA=ON
+CUPYCCX_CUDA = "OFF"
+
+# ---------------------------------------------------------------------------
+# pytest
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+testpaths    = ["tests/python"]
+addopts      = "-v --tb=short"
+filterwarnings = ["ignore::DeprecationWarning"]
+
+# ---------------------------------------------------------------------------
+# ruff (linting)
+# ---------------------------------------------------------------------------
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+select = ["E", "F", "W", "I", "UP"]
