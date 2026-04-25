@@ -1,8 +1,11 @@
-# cupyccx
+<p align="center">
+  <img src="logo.svg" alt="CuPyCCx" width="420"/>
+</p>
 
-**Author:** Varun Rishi
-
-**Coupled Cluster Doubles** — C++ implementations with CUDA GPU acceleration and Python bindings, including a PySCF interface.
+<p align="center">
+  <strong>Coupled Cluster Doubles</strong> — C++ implementations with CUDA GPU acceleration and Python bindings, including a PySCF interface.<br/>
+  <em>Author: Varun Rishi</em>
+</p>
 
 ## Methods
 
@@ -16,7 +19,7 @@ Both methods work in the **spin-orbital** basis and use antisymmetrized ERIs `<p
 ## Repository layout
 
 ```
-cupyccx/
+CuPyCCx/
 ├── include/cupyccx/       # C++ headers (types, integrals, solvers, tensor ops)
 ├── src/
 │   ├── cpp/               # CCD/LCCD drivers, CPU tensor contractions (BLAS)
