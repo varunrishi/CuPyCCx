@@ -6,26 +6,33 @@ import os
 import subprocess
 import pytest
 
-BUILD_DIR = os.path.abspath(
+BUILD_DIR  = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..", "build_cpp_tests")
 )
-EIGEN_DIR  = "/usr/local/Cellar/eigen/3.4.0_1/share/eigen3/cmake"
 CPP_BIN    = os.path.join(BUILD_DIR, "tests", "cpp", "test_cupyccx")
 SOURCE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+
+# Eigen3 cmake config: prefer env var, then common platform paths
+_EIGEN3_CANDIDATES = [
+    os.environ.get("EIGEN3_DIR", ""),
+    "/usr/share/eigen3/cmake",                               # Ubuntu apt
+    "/usr/local/Cellar/eigen/3.4.0_1/share/eigen3/cmake",   # macOS Homebrew
+    "/opt/homebrew/share/eigen3/cmake",                      # macOS arm Homebrew
+]
+EIGEN_DIR = next((p for p in _EIGEN3_CANDIDATES if p and os.path.isdir(p)), "")
 
 
 def _build():
     os.makedirs(BUILD_DIR, exist_ok=True)
-    subprocess.run(
-        [
-            "cmake", SOURCE_DIR,
-            "-DCUPYCCX_BUILD_TESTS=ON",
-            "-DCUPYCCX_BUILD_PYTHON=OFF",
-            f"-DEigen3_DIR={EIGEN_DIR}",
-            "-DCMAKE_BUILD_TYPE=Release",
-        ],
-        cwd=BUILD_DIR, check=True, capture_output=True,
-    )
+    cmake_args = [
+        "cmake", SOURCE_DIR,
+        "-DCUPYCCX_BUILD_TESTS=ON",
+        "-DCUPYCCX_BUILD_PYTHON=OFF",
+        "-DCMAKE_BUILD_TYPE=Release",
+    ]
+    if EIGEN_DIR:
+        cmake_args.append(f"-DEigen3_DIR={EIGEN_DIR}")
+    subprocess.run(cmake_args, cwd=BUILD_DIR, check=True, capture_output=True)
     subprocess.run(
         ["cmake", "--build", ".", "--parallel"],
         cwd=BUILD_DIR, check=True, capture_output=True,
