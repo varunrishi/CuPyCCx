@@ -3,7 +3,8 @@
 </p>
 
 <p align="center">
-  <strong>Coupled Cluster Doubles</strong> — C++ implementations with CUDA GPU acceleration and Python bindings, including a PySCF interface.<br/>
+  Implementations of <strong>Coupled Cluster variations</strong> (CCD, LCCD, …) in high-performance C++ and CUDA,<br/>
+  with easy access through an idiomatic Python interface and seamless <a href="https://pyscf.org">PySCF</a> integration.<br/><br/>
   <em>Author: Varun Rishi</em>
 </p>
 
