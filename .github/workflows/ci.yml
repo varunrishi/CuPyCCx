@@ -27,7 +27,7 @@ jobs:
 
       - name: Build and install cupyccx
         run: |
-          pip install -e . \
+          pip install -e ".[dev]" \
             -C cmake.define.Eigen3_DIR=/usr/share/eigen3/cmake \
             -C cmake.build-type=Release
 
