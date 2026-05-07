@@ -69,7 +69,7 @@ cupyccx::CCOptions default_opts() {
 
 }  // namespace
 
-const double E_LCCD_REF = -0.03288443;  // cupyccx solver, H2/STO-3G R=1.4 bohr
+const double E_LCCD_REF = -0.02082966;  // H2/STO-3G R=1.4 bohr (corrected after fixing P(ij) Fock term)
 const double E_CCD_REF  = -0.02141095;  // cupyccx solver, H2/STO-3G R=1.4 bohr
 
 TEST(LCCD, H2_Converged) {
