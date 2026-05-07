@@ -5,55 +5,79 @@
 namespace cupyccx {
 
 // ---------------------------------------------------------------------------
-// Linearized CCD (LCCD)
+// CCD / LCCD
 //
-// Amplitude equations with quadratic T2*T2 terms dropped:
+// Full CCD with quadratic T2*T2 contributions that renormalize the effective
+// two-particle interaction:
 //
-//   r_{ij}^{ab} = <ij||ab>
-//               + P(ab) f_bc t_{ij}^{ac}  -  P(ij) f_kj t_{ik}^{ab}
-//               + (1/2) <kl||ij> t_{kl}^{ab}
-//               + (1/2) <ab||cd> t_{ij}^{cd}
-//               + P(ij)P(ab) <kb||cj> t_{ik}^{ac}
+//   W_{klij} = <kl||ij> + (1/2) sum_{cd} <kl||cd> t_{ij}^{cd}
+//   W_{abcd} = <ab||cd> + (1/2) sum_{kl} <kl||cd> t_{kl}^{ab}   (ring)
 //
-// Reference: Bartlett & Purvis, Int. J. Quantum Chem. 14, 561 (1978)
+// When linearized=true (LCCD), the T2-dependent parts of W are omitted so
+// that W reduces to the bare integrals.  All other terms are identical.
+//
+// References:
+//   LCCD: Bartlett & Purvis, Int. J. Quantum Chem. 14, 561 (1978)
+//   CCD:  Purvis & Bartlett, J. Chem. Phys. 76, 1910 (1982)
 // ---------------------------------------------------------------------------
-class LCCD : public CCDBase {
+class CCD : public CCDBase {
 public:
-    using CCDBase::CCDBase;
+    explicit CCD(const SCFData& scf, const CCOptions& opts,
+                 bool linearized = false)
+        : CCDBase(scf, opts), linearized_(linearized) {}
+
     CCResult compute(real_t e_scf = 0.0) override;
 
 private:
-    // Build the residual (return rms norm)
+    bool linearized_;  // true → LCCD (skip T2 contributions in W intermediates)
+
+    // Build effective W intermediates
+    void build_W_oooo(const Tensor4& oooo,
+                      const Tensor4& oovv,
+                      const Tensor4& t2,
+                      Tensor4&       W_oooo) const;
+
+    void build_W_vvvv(const Tensor4& vvvv,
+                      const Tensor4& oovv,
+                      const Tensor4& t2,
+                      Tensor4&       W_vvvv) const;
+
     real_t build_residual(const Tensor4& t2,
                           const Tensor4& oovv,
-                          const Tensor4& vvvv,
-                          const Tensor4& oooo,
+                          const Tensor4& W_vvvv,
+                          const Tensor4& W_oooo,
                           const Tensor4& ovvo,
                           const Matrix&  F_vv,
                           const Matrix&  F_oo,
                           Tensor4&       residual) const;
 };
 
+
 // ---------------------------------------------------------------------------
-// Full CCD
+// Parameterized CCD (pCCD)
 //
-// Extends LCCD with quadratic T2*T2 contributions that renormalize the
-// effective two-particle interaction:
+// Scales the four classes of quadratic T2*T2 diagrams independently:
 //
-//   W_{klij} = <kl||ij> + (1/2) sum_{cd} <kl||cd> t_{ij}^{cd}
-//   W_{abcd} = <ab||cd> + (1/2) sum_{kl} <kl||cd> t_{kl}^{ab}   (ring)
+//   Quadratic in CCD  = A + B + C + D
+//   Quadratic in pCCD = A/2 + alpha*(A/2 + B) + beta*(C + D)
 //
-// The W intermediates replace the bare integrals in the residual expression.
+// where A is the ring-ring term (W_oooo), B is the ladder-ladder term
+// (W_vvvv), and C+D are the box/cross quadratic terms.
 //
-// Reference: Purvis & Bartlett, J. Chem. Phys. 76, 1910 (1982)
+// At alpha=1, beta=1: recovers full CCD.
+//
+// Reference: Huntington and Nooijen, J. Chem. Phys. 133, 184109 (2010)
 // ---------------------------------------------------------------------------
-class CCD : public CCDBase {
+class pCCD : public CCDBase {
 public:
-    using CCDBase::CCDBase;
+    pCCD(const SCFData& scf, const CCOptions& opts, real_t alpha, real_t beta)
+        : CCDBase(scf, opts), alpha_(alpha), beta_(beta) {}
     CCResult compute(real_t e_scf = 0.0) override;
 
 private:
-    // Build effective W intermediates
+    real_t alpha_;
+    real_t beta_;
+
     void build_W_oooo(const Tensor4& oooo,
                       const Tensor4& oovv,
                       const Tensor4& t2,

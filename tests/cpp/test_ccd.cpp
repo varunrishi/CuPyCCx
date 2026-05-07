@@ -75,7 +75,7 @@ const double E_CCD_REF  = -0.02141095;  // cupyccx solver, H2/STO-3G R=1.4 bohr
 TEST(LCCD, H2_Converged) {
     auto scf  = make_h2_scf();
     auto opts = default_opts();
-    cupyccx::LCCD solver(scf, opts);
+    cupyccx::CCD solver(scf, opts, /*linearized=*/true);
     auto result = solver.compute(0.0);
     EXPECT_TRUE(result.converged);
     EXPECT_NEAR(result.e_corr, E_LCCD_REF, 1e-6);
@@ -84,7 +84,7 @@ TEST(LCCD, H2_Converged) {
 TEST(LCCD, H2_IterCount) {
     auto scf  = make_h2_scf();
     auto opts = default_opts();
-    cupyccx::LCCD solver(scf, opts);
+    cupyccx::CCD solver(scf, opts, /*linearized=*/true);
     auto result = solver.compute(0.0);
     EXPECT_GT(result.n_iter, 0);
     EXPECT_LE(result.n_iter, opts.max_iter);
@@ -119,8 +119,8 @@ TEST(CCD, H2_T2Antisymmetry) {
 TEST(CCD, EnergyNegative) {
     auto scf = make_h2_scf();
     auto opts = default_opts();
-    cupyccx::CCD  ccd(scf, opts);
-    cupyccx::LCCD lccd(scf, opts);
+    cupyccx::CCD ccd(scf, opts);
+    cupyccx::CCD lccd(scf, opts, /*linearized=*/true);
     auto r_ccd  = ccd.compute(0.0);
     auto r_lccd = lccd.compute(0.0);
     EXPECT_LT(r_ccd.e_corr,  0.0);

@@ -142,24 +142,6 @@ eri_antisym : ndarray, shape (n_mo, n_mo, n_mo, n_mo)
 )doc");
 
     // ------------------------------------------------------------------
-    // LCCD solver
-    // ------------------------------------------------------------------
-    py::class_<cupyccx::LCCD>(m, "LCCD")
-        .def(py::init([](py::object scf_data_obj, const cupyccx::CCOptions& opts) {
-            // scf_data_obj is expected to be an SCFData returned from make_scf_data
-            // stored as a Python capsule; for simplicity we hold it by value in a
-            // shared_ptr kept alive by the lambda closure.
-            throw std::runtime_error(
-                "Direct LCCD construction from Python is not yet supported. "
-                "Use cupyccx.run_lccd() instead.");
-            (void)scf_data_obj; (void)opts;
-            return nullptr;
-        }))
-        .def("compute", [](cupyccx::LCCD& self, double e_scf) {
-            return self.compute(e_scf);
-        }, py::arg("e_scf") = 0.0);
-
-    // ------------------------------------------------------------------
     // Top-level run functions (preferred Python API)
     // ------------------------------------------------------------------
     m.def("run_lccd",
@@ -172,7 +154,7 @@ eri_antisym : ndarray, shape (n_mo, n_mo, n_mo, n_mo)
            py::object callback) -> cupyccx::CCResult
         {
             auto scf = make_scf_data(n_occ, n_vir, eps, fock, eri);
-            cupyccx::LCCD solver(scf, opts);
+            cupyccx::CCD solver(scf, opts, /*linearized=*/true);
             if (!callback.is_none()) {
                 solver.set_callback([&callback](int it, double e, double de, double rms) {
                     callback(it, e, de, rms);
@@ -185,7 +167,7 @@ eri_antisym : ndarray, shape (n_mo, n_mo, n_mo, n_mo)
         py::arg("opts")     = cupyccx::CCOptions{},
         py::arg("e_scf")    = 0.0,
         py::arg("callback") = py::none(),
-        R"doc(Run a Linearized CCD calculation and return the CCResult.)doc");
+        R"doc(Run a Linearized CCD (LCCD) calculation and return the CCResult.)doc");
 
     m.def("run_ccd",
         [](int n_occ, int n_vir,
@@ -211,4 +193,38 @@ eri_antisym : ndarray, shape (n_mo, n_mo, n_mo, n_mo)
         py::arg("e_scf")    = 0.0,
         py::arg("callback") = py::none(),
         R"doc(Run a full CCD calculation and return the CCResult.)doc");
+
+    m.def("run_pccd",
+        [](int n_occ, int n_vir,
+           const py::array_t<double>& eps,
+           const py::array_t<double>& fock,
+           const py::array_t<double>& eri,
+           double alpha,
+           double beta,
+           const cupyccx::CCOptions&  opts,
+           double e_scf,
+           py::object callback) -> cupyccx::CCResult
+        {
+            auto scf = make_scf_data(n_occ, n_vir, eps, fock, eri);
+            cupyccx::pCCD solver(scf, opts, alpha, beta);
+            if (!callback.is_none()) {
+                solver.set_callback([&callback](int it, double e, double de, double rms) {
+                    callback(it, e, de, rms);
+                });
+            }
+            return solver.compute(e_scf);
+        },
+        py::arg("n_occ"), py::arg("n_vir"),
+        py::arg("eps"), py::arg("fock"), py::arg("eri_antisym"),
+        py::arg("alpha")    = 1.0,
+        py::arg("beta")     = 1.0,
+        py::arg("opts")     = cupyccx::CCOptions{},
+        py::arg("e_scf")    = 0.0,
+        py::arg("callback") = py::none(),
+        R"doc(Run a parameterized CCD calculation and return the CCResult.
+
+Quadratic in CCD  = A + B + C + D
+Quadratic in pCCD = A/2 + alpha*(A/2 + B) + beta*(C + D)
+
+At alpha=1, beta=1 recovers full CCD.)doc");
 }
