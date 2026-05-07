@@ -1,20 +1,19 @@
 #pragma once
 
 #include "ccd_base.hpp"
+#include <string>
 
 namespace cupyccx {
 
 // ---------------------------------------------------------------------------
-// CCD / LCCD
+// CCD family (variant selected by name)
 //
-// Full CCD with quadratic T2*T2 contributions that renormalize the effective
-// two-particle interaction:
-//
+// variant="CCD"  — full CCD; W intermediates include T2*T2 contributions:
 //   W_{klij} = <kl||ij> + (1/2) sum_{cd} <kl||cd> t_{ij}^{cd}
 //   W_{abcd} = <ab||cd> + (1/2) sum_{kl} <kl||cd> t_{kl}^{ab}   (ring)
 //
-// When linearized=true (LCCD), the T2-dependent parts of W are omitted so
-// that W reduces to the bare integrals.  All other terms are identical.
+// variant="LCCD" — linearized CCD; T2-dependent parts of W are omitted so
+//   W reduces to the bare integrals.  All other terms are identical to CCD.
 //
 // References:
 //   LCCD: Bartlett & Purvis, Int. J. Quantum Chem. 14, 561 (1978)
@@ -23,13 +22,13 @@ namespace cupyccx {
 class CCD : public CCDBase {
 public:
     explicit CCD(const SCFData& scf, const CCOptions& opts,
-                 bool linearized = false)
-        : CCDBase(scf, opts), linearized_(linearized) {}
+                 std::string variant = "CCD")
+        : CCDBase(scf, opts), variant_(std::move(variant)) {}
 
     CCResult compute(real_t e_scf = 0.0) override;
 
 private:
-    bool linearized_;  // true → LCCD (skip T2 contributions in W intermediates)
+    std::string variant_;  // "CCD", "LCCD", ...
 
     // Build effective W intermediates
     void build_W_oooo(const Tensor4& oooo,

@@ -16,7 +16,7 @@ void CCD::build_W_oooo(const Tensor4& oooo,
                         const Tensor4& t2,
                         Tensor4&       W_oooo) const {
     W_oooo = oooo;
-    if (linearized_) return;  // LCCD: no T2 contribution
+    if (variant_ == "LCCD") return;  // LCCD: no T2 contribution
     const int o = scf_.n_occ, v = scf_.n_vir;
     // W_{klij} += (1/2) sum_{cd} <kl||cd> t_{ij}^{cd}
     for (int k = 0; k < o; ++k)
@@ -36,7 +36,7 @@ void CCD::build_W_vvvv(const Tensor4& vvvv,
                         const Tensor4& t2,
                         Tensor4&       W_vvvv) const {
     W_vvvv = vvvv;
-    if (linearized_) return;  // LCCD: no T2 contribution
+    if (variant_ == "LCCD") return;  // LCCD: no T2 contribution
     const int o = scf_.n_occ, v = scf_.n_vir;
     // W_{abcd} += (1/2) sum_{kl} <kl||cd> t_{kl}^{ab}
     for (int a = 0; a < v; ++a)
@@ -184,7 +184,7 @@ CCResult CCD::compute(real_t e_scf) {
     }
 
     if (!result.converged) {
-        const char* name = linearized_ ? "LCCD" : "CCD";
+        const char* name = variant_.c_str();
         std::cerr << name << ": WARNING — did not converge in "
                   << opts_.max_iter << " iterations\n";
     }

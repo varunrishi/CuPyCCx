@@ -154,7 +154,7 @@ eri_antisym : ndarray, shape (n_mo, n_mo, n_mo, n_mo)
            py::object callback) -> cupyccx::CCResult
         {
             auto scf = make_scf_data(n_occ, n_vir, eps, fock, eri);
-            cupyccx::CCD solver(scf, opts, /*linearized=*/true);
+            cupyccx::CCD solver(scf, opts, "LCCD");
             if (!callback.is_none()) {
                 solver.set_callback([&callback](int it, double e, double de, double rms) {
                     callback(it, e, de, rms);
