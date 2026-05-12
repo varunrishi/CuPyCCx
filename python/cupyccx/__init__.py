@@ -22,12 +22,12 @@ except PackageNotFoundError:
 
 # Try to import the compiled C++ extension
 try:
-    from cupyccx._cupyccx import CCOptions, CCResult, run_ccd, run_lccd, make_scf_data
+    from cupyccx._cupyccx import CCOptions, CCResult, run_ccd, run_lccd, run_dcd, run_pccd, make_scf_data
     _HAS_EXTENSION = True
 except ImportError:
     _HAS_EXTENSION = False
 
-from cupyccx.method import CCD, LCCD
+from cupyccx.method import CCD, LCCD, DCD, pCCD
 from cupyccx.scf_data import SCFInputData, prepare_from_pyscf
 from cupyccx.pyscf_interface import run_from_pyscf
 
@@ -35,6 +35,8 @@ __all__ = [
     # Solvers
     "CCD",
     "LCCD",
+    "DCD",
+    "pCCD",
     "CCOptions",
     "CCResult",
     # Integral extraction
@@ -44,4 +46,6 @@ __all__ = [
     "run_from_pyscf",
     "run_ccd",
     "run_lccd",
+    "run_dcd",
+    "run_pccd",
 ]

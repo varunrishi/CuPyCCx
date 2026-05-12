@@ -194,6 +194,31 @@ eri_antisym : ndarray, shape (n_mo, n_mo, n_mo, n_mo)
         py::arg("callback") = py::none(),
         R"doc(Run a full CCD calculation and return the CCResult.)doc");
 
+    m.def("run_dcd",
+        [](int n_occ, int n_vir,
+           const py::array_t<double>& eps,
+           const py::array_t<double>& fock,
+           const py::array_t<double>& eri,
+           const cupyccx::CCOptions&  opts,
+           double e_scf,
+           py::object callback) -> cupyccx::CCResult
+        {
+            auto scf = make_scf_data(n_occ, n_vir, eps, fock, eri);
+            cupyccx::DCD solver(scf, opts);
+            if (!callback.is_none()) {
+                solver.set_callback([&callback](int it, double e, double de, double rms) {
+                    callback(it, e, de, rms);
+                });
+            }
+            return solver.compute(e_scf);
+        },
+        py::arg("n_occ"), py::arg("n_vir"),
+        py::arg("eps"), py::arg("fock"), py::arg("eri_antisym"),
+        py::arg("opts")     = cupyccx::CCOptions{},
+        py::arg("e_scf")    = 0.0,
+        py::arg("callback") = py::none(),
+        R"doc(Run a Distinguishable Cluster Doubles (DCD) calculation and return the CCResult.)doc");
+
     m.def("run_pccd",
         [](int n_occ, int n_vir,
            const py::array_t<double>& eps,

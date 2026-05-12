@@ -194,3 +194,137 @@ class LCCD(_CCDSolver):
     faster than full CCD (same O(N^6) scaling but smaller prefactor).
     """
     _method_name = "LCCD"
+
+
+class DCD(_CCDSolver):
+    """Distinguishable Cluster Doubles (DCD) solver.
+
+    Keeps the Coulomb ring diagram and the mixed ring-ladder terms (scaled by
+    1/2), but drops the exchange ring and pure ladder quadratic contributions.
+    Numerically well-behaved for systems with stronger correlation.
+
+    Reference: Kats & Manby, J. Chem. Phys. 139, 021102 (2013)
+    """
+    _method_name = "DCD"
+
+    def compute(self,
+                e_scf: float = 0.0,
+                callback=None,
+                verbose: bool = False):
+        if not _HAS_EXT:
+            raise ImportError("cupyccx C++ extension not found. Build the project first.")
+
+        if verbose:
+            print(f"\n{'':=<60}")
+            print(f"  DCD Calculation")
+            print(f"{'':=<60}")
+            print(f"  {'Iter':>4}  {'E_corr':>18}  {'dE':>12}  {'RMS amp':>12}")
+            print(f"  {'-'*4}  {'-'*18}  {'-'*12}  {'-'*12}")
+
+        def _cb(it, e, de, rms):
+            if verbose:
+                print(f"  {it:>4}  {e:>18.10f}  {de:>12.4e}  {rms:>12.4e}")
+            if callback is not None:
+                callback(it, e, de, rms)
+
+        ext_opts = self.opts._to_ext()
+        ext_opts.method = "DCD"
+
+        ext_result = _ext.run_dcd(
+            self.n_occ, self.n_vir,
+            self.eps, self.fock, self.eri,
+            ext_opts, e_scf, _cb,
+        )
+
+        result = CCResult.from_ext(ext_result)
+
+        if verbose:
+            status = "CONVERGED" if result.converged else "NOT CONVERGED"
+            print(f"{'':=<60}")
+            print(f"  {status} in {result.n_iter} iterations")
+            print(f"  E_corr  = {result.e_corr:20.12f} Ha")
+            print(f"  E_total = {result.e_total:20.12f} Ha")
+            print(f"{'':=<60}\n")
+
+        return result
+
+
+class pCCD(_CCDSolver):
+    """Parameterized CCD (pCCD) solver.
+
+    Scales the four classes of quadratic T2*T2 diagrams independently::
+
+        Quadratic in CCD  = A + B + C + D
+        Quadratic in pCCD = A/2 + alpha*(A/2 + B) + beta*(C + D)
+
+    At alpha=1, beta=1 recovers full CCD.
+
+    Reference: Huntington and Nooijen, J. Chem. Phys. 133, 184109 (2010)
+    """
+    _method_name = "pCCD"
+
+    def __init__(self,
+                 n_occ: int,
+                 n_vir: int,
+                 eps: np.ndarray,
+                 fock: np.ndarray,
+                 eri_antisym: np.ndarray,
+                 alpha: float = 1.0,
+                 beta: float = 1.0,
+                 opts: Optional[CCOptions] = None):
+        super().__init__(n_occ, n_vir, eps, fock, eri_antisym, opts)
+        self.alpha = alpha
+        self.beta = beta
+
+    @classmethod
+    def from_scf_data(cls, data: "SCFInputData",
+                      alpha: float = 1.0,
+                      beta: float = 1.0,
+                      opts: Optional[CCOptions] = None) -> "pCCD":
+        return cls(
+            data.n_occ, data.n_vir,
+            data.eps, data.fock, data.eri_antisym,
+            alpha=alpha, beta=beta, opts=opts,
+        )
+
+    def compute(self,
+                e_scf: float = 0.0,
+                callback: Optional[Callable] = None,
+                verbose: bool = False) -> CCResult:
+        if not _HAS_EXT:
+            raise ImportError("cupyccx C++ extension not found. Build the project first.")
+
+        if verbose:
+            print(f"\n{'':=<60}")
+            print(f"  pCCD Calculation  (alpha={self.alpha}, beta={self.beta})")
+            print(f"{'':=<60}")
+            print(f"  {'Iter':>4}  {'E_corr':>18}  {'dE':>12}  {'RMS amp':>12}")
+            print(f"  {'-'*4}  {'-'*18}  {'-'*12}  {'-'*12}")
+
+        def _cb(it, e, de, rms):
+            if verbose:
+                print(f"  {it:>4}  {e:>18.10f}  {de:>12.4e}  {rms:>12.4e}")
+            if callback is not None:
+                callback(it, e, de, rms)
+
+        ext_opts = self.opts._to_ext()
+        ext_opts.method = "pCCD"
+
+        ext_result = _ext.run_pccd(
+            self.n_occ, self.n_vir,
+            self.eps, self.fock, self.eri,
+            self.alpha, self.beta,
+            ext_opts, e_scf, _cb,
+        )
+
+        result = CCResult.from_ext(ext_result)
+
+        if verbose:
+            status = "CONVERGED" if result.converged else "NOT CONVERGED"
+            print(f"{'':=<60}")
+            print(f"  {status} in {result.n_iter} iterations")
+            print(f"  E_corr  = {result.e_corr:20.12f} Ha")
+            print(f"  E_total = {result.e_total:20.12f} Ha")
+            print(f"{'':=<60}\n")
+
+        return result

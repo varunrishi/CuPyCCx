@@ -53,15 +53,38 @@ private:
 
 
 // ---------------------------------------------------------------------------
+// Distinguishable Cluster Doubles (DCD)
+//
+// Retains only the Coulomb ring diagram and the mixed ring-ladder terms
+// (scaled by 1/2).  Drops the exchange ring (DCD_1X) and pure ladder (DCD_5).
+// Numerically close to CCD but better behaved for strongly correlated systems.
+//
+// Reference: Kats & Manby, J. Chem. Phys. 139, 021102 (2013)
+// ---------------------------------------------------------------------------
+class DCD : public CCDBase {
+public:
+    explicit DCD(const SCFData& scf, const CCOptions& opts)
+        : CCDBase(scf, opts) {}
+    CCResult compute(real_t e_scf = 0.0) override;
+
+private:
+    real_t build_residual(const Tensor4& t2,
+                          const Tensor4& oovv,
+                          const Tensor4& vvvv,
+                          const Tensor4& oooo,
+                          const Tensor4& ovvo,
+                          const Matrix&  F_vv,
+                          const Matrix&  F_oo,
+                          Tensor4&       residual) const;
+};
+
+
+// ---------------------------------------------------------------------------
 // Parameterized CCD (pCCD)
 //
-// Scales the four classes of quadratic T2*T2 diagrams independently:
+// Scales the quadratic T2*T2 diagrams via two parameters alpha and beta:
 //
-//   Quadratic in CCD  = A + B + C + D
-//   Quadratic in pCCD = A/2 + alpha*(A/2 + B) + beta*(C + D)
-//
-// where A is the ring-ring term (W_oooo), B is the ladder-ladder term
-// (W_vvvv), and C+D are the box/cross quadratic terms.
+//   temp = beta*(DCD_1C + DCD_1X + DCD_3) + alpha*(0.5*DCD_4 + DCD_5) + 0.5*DCD_4
 //
 // At alpha=1, beta=1: recovers full CCD.
 //
@@ -77,20 +100,10 @@ private:
     real_t alpha_;
     real_t beta_;
 
-    void build_W_oooo(const Tensor4& oooo,
-                      const Tensor4& oovv,
-                      const Tensor4& t2,
-                      Tensor4&       W_oooo) const;
-
-    void build_W_vvvv(const Tensor4& vvvv,
-                      const Tensor4& oovv,
-                      const Tensor4& t2,
-                      Tensor4&       W_vvvv) const;
-
     real_t build_residual(const Tensor4& t2,
                           const Tensor4& oovv,
-                          const Tensor4& W_vvvv,
-                          const Tensor4& W_oooo,
+                          const Tensor4& vvvv,
+                          const Tensor4& oooo,
                           const Tensor4& ovvo,
                           const Matrix&  F_vv,
                           const Matrix&  F_oo,

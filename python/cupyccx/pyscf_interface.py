@@ -22,10 +22,10 @@ from __future__ import annotations
 
 from typing import Optional, Union
 
-from cupyccx.method import CCD, LCCD, CCOptions, CCResult
+from cupyccx.method import CCD, LCCD, DCD, pCCD, CCOptions, CCResult
 from cupyccx.scf_data import SCFInputData, prepare_from_pyscf  # re-exported
 
-_METHODS = {"CCD": CCD, "LCCD": LCCD}
+_METHODS = {"CCD": CCD, "LCCD": LCCD, "DCD": DCD, "pCCD": pCCD}
 
 
 def run_from_pyscf(
@@ -34,6 +34,8 @@ def run_from_pyscf(
     opts: Optional[CCOptions] = None,
     frozen: Union[int, list, None] = None,
     verbose: bool = True,
+    alpha: float = 1.0,
+    beta: float = 1.0,
 ) -> CCResult:
     """
     Run CCD or LCCD from a converged PySCF RHF or UHF object.
@@ -46,7 +48,7 @@ def run_from_pyscf(
     mf : pyscf.scf.RHF | pyscf.scf.UHF
         Converged mean-field object.
     method : str
-        ``"CCD"`` (default) or ``"LCCD"``.
+        ``"CCD"`` (default), ``"LCCD"``, ``"DCD"``, or ``"pCCD"``.
     opts : CCOptions, optional
         Solver options (convergence thresholds, DIIS, GPU flag).
     frozen : int or list of int, optional
@@ -54,6 +56,10 @@ def run_from_pyscf(
         ``frozen=1`` freezes the lowest spatial MO.
     verbose : bool
         Print the iteration table.
+    alpha : float
+        pCCD alpha parameter (ignored for CCD/LCCD). Default 1.0.
+    beta : float
+        pCCD beta parameter (ignored for CCD/LCCD). Default 1.0.
 
     Returns
     -------
@@ -73,10 +79,17 @@ def run_from_pyscf(
 
     data = prepare_from_pyscf(mf, frozen=frozen, verbose=verbose)
 
-    solver_cls = _METHODS[method]
-    solver = solver_cls(
-        data.n_occ, data.n_vir,
-        data.eps, data.fock, data.eri_antisym,
-        opts=opts or CCOptions(),
-    )
+    if method == "pCCD":
+        solver = pCCD(
+            data.n_occ, data.n_vir,
+            data.eps, data.fock, data.eri_antisym,
+            alpha=alpha, beta=beta, opts=opts or CCOptions(),
+        )
+    else:
+        solver_cls = _METHODS[method]
+        solver = solver_cls(
+            data.n_occ, data.n_vir,
+            data.eps, data.fock, data.eri_antisym,
+            opts=opts or CCOptions(),
+        )
     return solver.compute(e_scf=data.e_scf, verbose=verbose)
