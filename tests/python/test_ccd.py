@@ -99,7 +99,7 @@ def test_run_ccd_converges():
                 opts=opts._to_ext())
     assert r.converged
     assert r.e_corr < 0
-    assert abs(r.e_corr - (-0.02141095)) < 1e-6
+    assert abs(r.e_corr - (-0.02056178)) < 1e-6
 
 
 @skip_no_ext

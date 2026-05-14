@@ -23,7 +23,7 @@ from cupyccx.method import CCD, LCCD, CCOptions
 #   E_corr(CCSD) = -0.02056178 Ha
 # cupyccx solver:
 #   E_corr(LCCD) = -0.03288443 Ha
-#   E_corr(CCD)  = -0.02141095 Ha
+#   E_corr(CCD)  = -0.02056162 Ha  (matches PySCF CCSD to 0.2 µHa)
 # ------------------------------------------------------------------
 eps_occ, eps_vir = -0.57820298, 0.67026777
 

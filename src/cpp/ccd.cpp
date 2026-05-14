@@ -18,7 +18,7 @@ void CCD::build_W_oooo(const Tensor4& oooo,
     W_oooo = oooo;
     if (variant_ == "LCCD") return;  // LCCD: no T2 contribution
     const int o = scf_.n_occ, v = scf_.n_vir;
-    // W_{klij} += (1/2) sum_{cd} <kl||cd> t_{ij}^{cd}
+    // W_{klij} += (1/4) sum_{cd} <kl||cd> t_{ij}^{cd}
     for (int k = 0; k < o; ++k)
     for (int l = 0; l < o; ++l)
     for (int i = 0; i < o; ++i)
@@ -27,7 +27,7 @@ void CCD::build_W_oooo(const Tensor4& oooo,
         for (int c = 0; c < v; ++c)
         for (int d = 0; d < v; ++d)
             s += oovv(k, l, c, d) * t2(i, j, c, d);
-        W_oooo(k, l, i, j) += 0.5 * s;
+        W_oooo(k, l, i, j) += 0.25 * s;
     }
 }
 
@@ -38,7 +38,7 @@ void CCD::build_W_vvvv(const Tensor4& vvvv,
     W_vvvv = vvvv;
     if (variant_ == "LCCD") return;  // LCCD: no T2 contribution
     const int o = scf_.n_occ, v = scf_.n_vir;
-    // W_{abcd} += (1/2) sum_{kl} <kl||cd> t_{kl}^{ab}
+    // W_{abcd} += (1/4) sum_{kl} <kl||cd> t_{kl}^{ab}
     for (int a = 0; a < v; ++a)
     for (int b = 0; b < v; ++b)
     for (int c = 0; c < v; ++c)
@@ -47,7 +47,7 @@ void CCD::build_W_vvvv(const Tensor4& vvvv,
         for (int k = 0; k < o; ++k)
         for (int l = 0; l < o; ++l)
             s += oovv(k, l, c, d) * t2(k, l, a, b);
-        W_vvvv(a, b, c, d) += 0.5 * s;
+        W_vvvv(a, b, c, d) += 0.25 * s;
     }
 }
 
@@ -110,6 +110,37 @@ real_t CCD::build_residual(const Tensor4& t2,
                + ovvo(k, a, c, i) * t2(j, k, b, c);  // P(ij)P(ab) -> +1
         }
         R(i, j, a, b) += s;
+    }
+
+    // -(1/2) P(ij)P(ab) sum_{klcd} <kl||cd> t_{ik}^{ac} t_{jl}^{bd}
+    // (quadratic ring-ring from dressed W_{mbej} intermediate; CCD only)
+    if (variant_ != "LCCD") {
+        // X(i,a,l,d) = sum_{k,c} oovv(k,l,c,d) * t2(i,k,a,c)
+        Tensor4 X(o, v, o, v);
+        for (int i = 0; i < o; ++i)
+        for (int a = 0; a < v; ++a)
+        for (int l = 0; l < o; ++l)
+        for (int d = 0; d < v; ++d) {
+            real_t s = 0.0;
+            for (int k = 0; k < o; ++k)
+            for (int c = 0; c < v; ++c)
+                s += oovv(k, l, c, d) * t2(i, k, a, c);
+            X(i, a, l, d) = s;
+        }
+        for (int i = 0; i < o; ++i)
+        for (int j = 0; j < o; ++j)
+        for (int a = 0; a < v; ++a)
+        for (int b = 0; b < v; ++b) {
+            real_t s = 0.0;
+            for (int l = 0; l < o; ++l)
+            for (int d = 0; d < v; ++d) {
+                s += X(i, a, l, d) * t2(j, l, b, d)   // base
+                   - X(j, a, l, d) * t2(i, l, b, d)   // P(ij)
+                   - X(i, b, l, d) * t2(j, l, a, d)   // P(ab)
+                   + X(j, b, l, d) * t2(i, l, a, d);  // P(ij)P(ab)
+            }
+            R(i, j, a, b) -= 0.5 * s;
+        }
     }
 
     real_t rms = 0.0;
