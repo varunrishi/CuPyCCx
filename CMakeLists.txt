@@ -1,5 +1,17 @@
 cmake_minimum_required(VERSION 3.20)
 
+# Force BSD-format archiver on macOS to avoid GNU ar format incompatibility with ld
+if(APPLE)
+    find_program(_SYS_AR ar PATHS /usr/bin NO_DEFAULT_PATH)
+    find_program(_SYS_RANLIB ranlib PATHS /usr/bin NO_DEFAULT_PATH)
+    if(_SYS_AR)
+        set(CMAKE_AR "${_SYS_AR}" CACHE FILEPATH "Archiver" FORCE)
+    endif()
+    if(_SYS_RANLIB)
+        set(CMAKE_RANLIB "${_SYS_RANLIB}" CACHE FILEPATH "Ranlib" FORCE)
+    endif()
+endif()
+
 project(cupyccx
     VERSION 0.1
     DESCRIPTION "Coupled Cluster Doubles: C++/CUDA/Python"
@@ -12,6 +24,7 @@ option(CUPYCCX_BUILD_PYTHON "Build Python bindings (requires pybind11)" ON)
 option(CUPYCCX_BUILD_TESTS  "Build C++ unit tests"                       ON)
 option(CUPYCCX_CUDA         "Enable CUDA GPU backend"                    OFF)
 option(CUPYCCX_USE_OPENMP   "Enable OpenMP threading"                    ON)
+
 
 # ---------------------------------------------------------------------------
 # C++ standard
@@ -125,6 +138,7 @@ endif()
 
 # Make the core library position-independent (needed for shared libraries)
 set_target_properties(cupyccx_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
 
 # ---------------------------------------------------------------------------
 # Python extension module

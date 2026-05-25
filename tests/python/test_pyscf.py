@@ -223,3 +223,48 @@ def test_h2o_ccd_frozen(h2o_rhf):
     result = run_from_pyscf(h2o_rhf, method="CCD", frozen=1, verbose=False)
     assert result.converged
     assert result.e_corr < 0
+
+
+# ---------------------------------------------------------------------------
+# N2 / STO-3G reference energies
+# Reference CCD:  -0.15939390011736 Ha  (PySCF CCSD with t1=0)
+# Reference LCCD: -0.16290979       Ha  (PSI4)
+# Reference HF:  -107.5000635015    Ha
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(scope="module")
+def n2_sto3g_rhf():
+    """Converged RHF on N2 / STO-3G at experimental bond length (2.118 Bohr)."""
+    from pyscf import gto, scf
+    mol = gto.M(atom="N 0 0 0; N 0 0 2.118", basis="sto-3g", unit="Bohr", verbose=0)
+    mf = scf.RHF(mol)
+    mf.verbose = 0
+    mf.kernel()
+    return mf
+
+
+@skip_pyscf
+def test_n2_hf_energy(n2_sto3g_rhf):
+    assert abs(n2_sto3g_rhf.e_tot - (-107.5000635015)) < 1e-6
+
+
+@skip_both
+def test_n2_ccd_energy(n2_sto3g_rhf):
+    """CCD on N2/STO-3G should match PySCF's CCD (CCSD with t1=0) to 1e-5 Ha."""
+    from cupyccx.pyscf_interface import run_from_pyscf
+    from cupyccx.method import CCOptions
+    opts = CCOptions(max_iter=200, conv_energy=1e-9, conv_amp=1e-8)
+    result = run_from_pyscf(n2_sto3g_rhf, method="CCD", opts=opts, verbose=False)
+    assert result.converged
+    assert abs(result.e_corr - (-0.15939390)) < 1e-5
+
+
+@skip_both
+def test_n2_lccd_energy(n2_sto3g_rhf):
+    """LCCD on N2/STO-3G should match PSI4 reference to 1e-5 Ha."""
+    from cupyccx.pyscf_interface import run_from_pyscf
+    from cupyccx.method import CCOptions
+    opts = CCOptions(max_iter=200, conv_energy=1e-9, conv_amp=1e-8)
+    result = run_from_pyscf(n2_sto3g_rhf, method="LCCD", opts=opts, verbose=False)
+    assert result.converged
+    assert abs(result.e_corr - (-0.16290979)) < 1e-5
