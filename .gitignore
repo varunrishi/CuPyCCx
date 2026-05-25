@@ -29,3 +29,10 @@ venv/
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Local
+.cache/
+.claude/
+CCD_DEBUG_PROGRESS.md
+build.sh
+build_cpp_tests/
