@@ -112,7 +112,7 @@ real_t CCD::build_residual(const Tensor4& t2,
         R(i, j, a, b) += s;
     }
 
-    // -(1/2) P(ij)P(ab) sum_{klcd} <kl||cd> t_{ik}^{ac} t_{jl}^{bd}
+    // (1/2) P(ij)P(ab) sum_{klcd} <kl||cd> t_{ik}^{ac} t_{jl}^{bd}
     // (quadratic ring-ring from dressed W_{mbej} intermediate; CCD only)
     if (variant_ != "LCCD") {
         // X(i,a,l,d) = sum_{k,c} oovv(k,l,c,d) * t2(i,k,a,c)
@@ -139,7 +139,59 @@ real_t CCD::build_residual(const Tensor4& t2,
                    - X(i, b, l, d) * t2(j, l, a, d)   // P(ab)
                    + X(j, b, l, d) * t2(i, l, a, d);  // P(ij)P(ab)
             }
-            R(i, j, a, b) -= 0.5 * s;
+            R(i, j, a, b) += 0.5 * s;
+        }
+
+        // Dressed F_vv: ΔF_vv(b,e) = -(1/2) Σ_{k,l,d} <kl||ed> t_{kl}^{bd}
+        // Contribution to residual: P(ab) Σ_e ΔF_vv(b,e) t_{ij}^{ae}
+        {
+            Matrix dF_vv(v, v);
+            dF_vv.setZero();
+            for (int b = 0; b < v; ++b)
+            for (int e = 0; e < v; ++e) {
+                real_t s = 0.0;
+                for (int k = 0; k < o; ++k)
+                for (int l = 0; l < o; ++l)
+                for (int d = 0; d < v; ++d)
+                    s += oovv(k, l, e, d) * t2(k, l, b, d);
+                dF_vv(b, e) = -0.5 * s;
+            }
+            for (int i = 0; i < o; ++i)
+            for (int j = 0; j < o; ++j)
+            for (int a = 0; a < v; ++a)
+            for (int b = 0; b < v; ++b) {
+                real_t s = 0.0;
+                for (int e = 0; e < v; ++e)
+                    s += dF_vv(a, e) * t2(i, j, b, e)
+                       - dF_vv(b, e) * t2(i, j, a, e);
+                R(i, j, a, b) -= s;
+            }
+        }
+
+        // Dressed F_oo: ΔF_oo(k,j) = +(1/2) Σ_{l,c,d} <kl||cd> t_{jl}^{cd}
+        // Contribution to residual: -P(ij) Σ_k ΔF_oo(k,j) t_{ik}^{ab}
+        {
+            Matrix dF_oo(o, o);
+            dF_oo.setZero();
+            for (int k = 0; k < o; ++k)
+            for (int jj = 0; jj < o; ++jj) {
+                real_t s = 0.0;
+                for (int l = 0; l < o; ++l)
+                for (int c = 0; c < v; ++c)
+                for (int d = 0; d < v; ++d)
+                    s += oovv(k, l, c, d) * t2(jj, l, c, d);
+                dF_oo(k, jj) = 0.5 * s;
+            }
+            for (int i = 0; i < o; ++i)
+            for (int j = 0; j < o; ++j)
+            for (int a = 0; a < v; ++a)
+            for (int b = 0; b < v; ++b) {
+                real_t s = 0.0;
+                for (int k = 0; k < o; ++k)
+                    s += dF_oo(k, j) * t2(i, k, a, b)
+                       - dF_oo(k, i) * t2(j, k, a, b);
+                R(i, j, a, b) -= s;
+            }
         }
     }
 
