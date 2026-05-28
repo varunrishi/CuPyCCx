@@ -19,6 +19,8 @@
 
 All methods work in the **spin-orbital** basis. `CCD` and `LCCD` use antisymmetrized ERIs `<pq‖rs>`; `DCD` and `pCCD` additionally require plain Coulomb ERIs `<pq|rs>` (provided automatically by `prepare_from_pyscf`).
 
+The DCD and pCCD implementations follow [[1]](#references): V. Rishi, A. Perera, R. J. Bartlett, *J. Chem. Phys.* **144**, 124117 (2016).
+
 ### pCCD parameters
 
 `pCCD` scales the quadratic T₂·T₂ diagrams via two parameters:
@@ -183,6 +185,12 @@ ctest --test-dir build --output-on-failure
 - **DIIS** extrapolation is on by default (`CCOptions.use_diis = True`, up to 6 vectors).
 - **MP2 amplitudes** are used as the initial guess for T₂.
 - The Python `CCOptions` dataclass mirrors the C++ `CCOptions` struct and is converted by `_to_ext()` before being passed to the compiled extension.
+
+## References
+
+<a name="references"></a>
+
+[1] V. Rishi, A. Perera, R. J. Bartlett, "Assessing the distinguishable cluster approximation based on the triple bond-breaking in the nitrogen molecule," *J. Chem. Phys.* **144**, 124117 (2016). https://doi.org/10.1063/1.4944087
 
 ## License
 
