@@ -35,3 +35,27 @@ jobs:
         run: python -m pytest tests/python/ -v
         env:
           EIGEN3_DIR: /usr/share/eigen3/cmake
+
+  cuda-build:
+    name: CUDA build (compile-only)
+    runs-on: ubuntu-latest
+    container: nvidia/cuda:12.1.0-devel-ubuntu22.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          apt-get update -qq
+          apt-get install -y python3-pip cmake ninja-build libeigen3-dev libopenblas-dev
+
+      - name: Install build backend
+        run: pip3 install scikit-build-core pybind11 numpy
+
+      - name: Build with CUDA enabled (sm_75 = Turing/T4)
+        run: |
+          pip3 install -e . \
+            -C cmake.define.CUPYCCX_CUDA=ON \
+            -C cmake.define.CUPYCCX_CUDA_ARCH=75 \
+            -C cmake.define.Eigen3_DIR=/usr/share/eigen3/cmake \
+            -C cmake.build-type=Release
