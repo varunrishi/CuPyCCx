@@ -3,9 +3,9 @@
 </p>
 
 <p align="center">
-  Implementations of <strong>Coupled Cluster variations</strong> (CCD, LCCD, …) in high-performance C++ and CUDA,<br/>
-  with easy access through an idiomatic Python interface and seamless <a href="https://pyscf.org">PySCF</a> integration.<br/><br/>
-  <em>Author: Varun Rishi</em>
+  High-performance <strong>Coupled Cluster Doubles</strong> — CCD, LCCD, DCD, and pCCD —<br/>
+  accelerated in C++ and CUDA, with a clean Python interface and seamless <a href="https://pyscf.org">PySCF</a> integration.<br/><br/>
+  <strong>Author: <a href="https://github.com/varunrishi">Varun Rishi</a></strong>
 </p>
 
 ## Methods
