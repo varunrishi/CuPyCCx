@@ -10,6 +10,16 @@
 // here are the reference implementation: correct, readable, and verifiable.
 // ---------------------------------------------------------------------------
 
+#ifdef CUPYCCX_CUDA
+// Forward-declare GPU entry points with C linkage to match their definitions
+// in tensor_ops_gpu.cu (which uses extern "C"). Declarations must be at file
+// scope — linkage-specifications are not valid at block scope in C++.
+extern "C" {
+void gpu_backend_init();
+void gpu_backend_finalize();
+}
+#endif
+
 namespace cupyccx {
 namespace tensor_ops {
 
@@ -18,7 +28,6 @@ static bool s_gpu = false;
 void init(bool use_gpu) {
 #ifdef CUPYCCX_CUDA
     if (use_gpu) {
-        extern "C" void gpu_backend_init();
         gpu_backend_init();
         s_gpu = true;
         return;
@@ -30,7 +39,6 @@ void init(bool use_gpu) {
 void finalize() {
 #ifdef CUPYCCX_CUDA
     if (s_gpu) {
-        extern "C" void gpu_backend_finalize();
         gpu_backend_finalize();
         s_gpu = false;
         return;
