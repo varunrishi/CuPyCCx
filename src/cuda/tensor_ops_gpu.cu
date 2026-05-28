@@ -64,6 +64,8 @@ static void gpu_dgemm(int M, int N, int K,
                              d_C, N));
 }
 
+namespace tensor_ops {
+
 // ---------------------------------------------------------------------------
 // (1/2) sum_{kl}  W_oooo[k,l,i,j] * T2[k,l,a,b]  →  R[i,j,a,b]
 //
@@ -166,4 +168,5 @@ void gpu_contract_kbcj_ikac(const Tensor4& W, const Tensor4& T2,
     }
 }
 
+}  // namespace tensor_ops
 }  // namespace cupyccx
