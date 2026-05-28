@@ -14,8 +14,27 @@
 |--------|-------------|
 | `LCCD` | Linearized CCD — quadratic T₂ terms dropped |
 | `CCD`  | Full Coupled Cluster Doubles |
+| `DCD`  | Distinguishable Cluster Doubles (Kats & Manby 2013) — Coulomb ring only |
+| `pCCD` | Parameterized CCD — interpolates between LCCD and CCD via α, β |
 
-Both methods work in the **spin-orbital** basis and use antisymmetrized ERIs `<pq‖rs>`.
+All methods work in the **spin-orbital** basis. `CCD` and `LCCD` use antisymmetrized ERIs `<pq‖rs>`; `DCD` and `pCCD` additionally require plain Coulomb ERIs `<pq|rs>` (provided automatically by `prepare_from_pyscf`).
+
+### pCCD parameters
+
+`pCCD` scales the quadratic T₂·T₂ diagrams via two parameters:
+
+```
+Quadratic = A/2 + α·(A/2 + B) + β·(C + D)
+```
+
+where A, B, C are ladder/mixed diagrams and D = D_c + D_x is the full ring diagram.
+
+| α | β | Equivalent to |
+|---|---|---------------|
+| 0 | 0 | A/2 only |
+| 0 | 1 | A/2 + C + full ring D |
+| 1 | 0 | A + B (ladder only) |
+| 1 | 1 | Full CCD |
 
 ## Repository layout
 
@@ -103,6 +122,30 @@ mf  = scf.RHF(mol).run()
 
 result = run_from_pyscf(mf, method="CCD", verbose=True)
 print(f"CCD E_corr = {result.e_corr:.10f} Ha")
+```
+
+### pCCD via `run_from_pyscf`
+
+Pass `alpha` and `beta` directly:
+
+```python
+result = run_from_pyscf(mf, method="pCCD", alpha=0.5, beta=0.8, verbose=True)
+print(f"pCCD E_corr = {result.e_corr:.10f} Ha")
+```
+
+### pCCD via `from_scf_data` (more control)
+
+```python
+from cupyccx.scf_data import prepare_from_pyscf
+from cupyccx.method import pCCD, CCOptions
+
+data = prepare_from_pyscf(mf)
+opts = CCOptions(max_iter=200, conv_energy=1e-9)
+
+result = pCCD.from_scf_data(data, alpha=0.5, beta=0.8, opts=opts).compute(
+    e_scf=data.e_scf, verbose=True
+)
+print(f"pCCD E_corr = {result.e_corr:.10f} Ha")
 ```
 
 ### GPU acceleration
