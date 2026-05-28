@@ -53,6 +53,8 @@ CCD total energy -107.65945740157817
 LCCD corr energy from PSI4: -0.1629097909 Ha
 LCCD + Quad Term B = -0.166120529098 Ha 
 
+pCCD(1,1) corr energy : -0.1593939 ha
+DCD corr energy : -0.16839616 Ha
 
 CuPyCCx so far
 LCCD   E_corr = 0.1629094 Ha 
@@ -60,20 +62,46 @@ CCD    E_corr = -0.152565 Ha
 
 
 """
-"""
 # pCCD with custom parameters
+
+from pyscf import gto, scf
+from cupyccx.scf_data import prepare_from_pyscf
+from cupyccx.method import pCCD, CCOptions
+
+
+data = prepare_from_pyscf(mf)
+opts = CCOptions(max_iter=100)
+
+result = pCCD.from_scf_data(data, alpha=1, beta=1, opts=opts).compute(
+    e_scf=data.e_scf, verbose=True
+)
+print(f"pCCD(alpha=1,beta=1) E_corr = {result.e_corr:.10f} Ha")
+
+
+# pCCD directly
 from cupyccx.method import pCCD
 from cupyccx.scf_data import prepare_from_pyscf
 
-data = prepare_from_pyscf(mf)
-result_pccd = pCCD.from_scf_data(data, alpha=1.0, beta=1.0, opts=opts).compute(
-)
-print(f"pCCD  E_corr = {result_pccd.e_corr:.10f} Ha")
+result = run_from_pyscf(mf, method="pCCD", alpha=1.0, beta=1.0, opts=opts, verbose=True)
+
+print(f"{method:5s}  E_corr = {result.e_corr:.10f} Ha\n")  
+print(f"E_total = {result.e_total:.10f} Ha\n")
+
+#
+
+
+
+#data = prepare_from_pyscf(mf)
+#result_pccd = pCCD.from_scf_data(data, alpha=1.0, beta=1.0, opts=opts).compute()
+#print(f"pCCD  E_corr = {result_pccd.e_corr:.10f} Ha")
 
 #With frozen core (freeze the two N 1s orbitals, which is standard for N2):
 
-result_fc = run_from_pyscf(mf, method="CCD", frozen=2, opts=opts, verbose=True)
-"""
+# DCD
+result = run_from_pyscf(mf, method="DCD", opts=opts, verbose=True)
+
+print(f"{method:5s}  E_corr = {result.e_corr:.10f} Ha\n")
+print(f"E_total = {result.e_total:.10f} Ha\n")
 
 
 """

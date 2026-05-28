@@ -526,22 +526,89 @@ real_t DCD::build_residual(const Tensor4& t2,
     // Linear terms (Fock + bare ladders + bare ring)
     build_linear_residual(t2, oovv, vvvv, oooo, ovvo, F_vv, F_oo, o, v, R);
 
-    // Quadratic DCD terms: Coulomb ring (plain) + half of mixed ring-ladder
-    Tensor4 Q(o, o, v, v);
-    build_quad_Q(oovv, oovv_plain, t2, o, v,
-                 /*cDc=*/  0.5,   // Coulomb ring, plain ERIs
-                 /*cC=*/  -0.25,  // half of CCD mixed term
-                 /*cA=*/  -0.25,  // half of CCD mixed term
-                 /*cDx=*/  0.0,   // exchange ring dropped
-                 /*cB=*/   0.0,   // pure ladder dropped
-                 Q);
+    // DCD quadratic terms (Kats & Manby 2013):
+    // Q1: +(1/4) P(ij) sum_{klcd} <kl||cd> t_{ik}^{cd} t_{lj}^{ab}
+    // Q2: +(1/4) P(ab) sum_{klcd} <kl||cd> t_{kl}^{ac} t_{ij}^{db}
+    // Q3: +(1/2) P(ij)P(ab) sum_{klcd} <kl|cd> t_{ik}^{ac} t_{jl}^{bd}
 
-    // Add symmetrised quadratic: Q[i,j,a,b] + Q[j,i,b,a]
-    for (int i = 0; i < o; ++i)
-    for (int j = 0; j < o; ++j)
-    for (int a = 0; a < v; ++a)
-    for (int b = 0; b < v; ++b)
-        R(i, j, a, b) += Q(i, j, a, b) + Q(j, i, b, a);
+    // Q1: Y1[i,l] = sum_{k,c,d} oovv[k,l,c,d]*t2[i,k,c,d]
+    {
+        std::vector<real_t> Y1(o * o, 0.0);
+        for (int i = 0; i < o; ++i)
+        for (int l = 0; l < o; ++l) {
+            real_t s = 0.0;
+            for (int k = 0; k < o; ++k)
+            for (int c = 0; c < v; ++c)
+            for (int d = 0; d < v; ++d)
+                s += oovv(k, l, c, d) * t2(i, k, c, d);
+            Y1[i * o + l] = s;
+        }
+        for (int i = 0; i < o; ++i)
+        for (int j = 0; j < o; ++j)
+        for (int a = 0; a < v; ++a)
+        for (int b = 0; b < v; ++b) {
+            real_t x1ij = 0.0, x1ji = 0.0;
+            for (int l = 0; l < o; ++l) {
+                x1ij += Y1[i * o + l] * t2(l, j, a, b);
+                x1ji += Y1[j * o + l] * t2(l, i, a, b);
+            }
+            R(i, j, a, b) += 0.25 * (x1ij - x1ji);
+        }
+    }
+
+    // Q2: Y2[a,d] = sum_{k,l,c} oovv[k,l,c,d]*t2[k,l,a,c]
+    {
+        std::vector<real_t> Y2(v * v, 0.0);
+        for (int a = 0; a < v; ++a)
+        for (int d = 0; d < v; ++d) {
+            real_t s = 0.0;
+            for (int k = 0; k < o; ++k)
+            for (int l = 0; l < o; ++l)
+            for (int c = 0; c < v; ++c)
+                s += oovv(k, l, c, d) * t2(k, l, a, c);
+            Y2[a * v + d] = s;
+        }
+        for (int i = 0; i < o; ++i)
+        for (int j = 0; j < o; ++j)
+        for (int a = 0; a < v; ++a)
+        for (int b = 0; b < v; ++b) {
+            real_t x2ab = 0.0, x2ba = 0.0;
+            for (int d = 0; d < v; ++d) {
+                x2ab += Y2[a * v + d] * t2(i, j, d, b);
+                x2ba += Y2[b * v + d] * t2(i, j, d, a);
+            }
+            R(i, j, a, b) += 0.25 * (x2ab - x2ba);
+        }
+    }
+
+    // Q3: Z3[i,a,l,d] = sum_{k,c} oovv_plain[k,l,c,d]*t2[i,k,a,c]
+    {
+        Tensor4 Z3(o, v, o, v);
+        for (int i = 0; i < o; ++i)
+        for (int a = 0; a < v; ++a)
+        for (int l = 0; l < o; ++l)
+        for (int d = 0; d < v; ++d) {
+            real_t s = 0.0;
+            for (int k = 0; k < o; ++k)
+            for (int c = 0; c < v; ++c)
+                s += oovv_plain(k, l, c, d) * t2(i, k, a, c);
+            Z3(i, a, l, d) = s;
+        }
+        for (int i = 0; i < o; ++i)
+        for (int j = 0; j < o; ++j)
+        for (int a = 0; a < v; ++a)
+        for (int b = 0; b < v; ++b) {
+            real_t x3_ijab = 0.0, x3_jiab = 0.0, x3_ijba = 0.0, x3_jiba = 0.0;
+            for (int l = 0; l < o; ++l)
+            for (int d = 0; d < v; ++d) {
+                x3_ijab += Z3(i, a, l, d) * t2(j, l, b, d);
+                x3_jiab += Z3(j, a, l, d) * t2(i, l, b, d);
+                x3_ijba += Z3(i, b, l, d) * t2(j, l, a, d);
+                x3_jiba += Z3(j, b, l, d) * t2(i, l, a, d);
+            }
+            R(i, j, a, b) += 0.5 * (x3_ijab - x3_jiab - x3_ijba + x3_jiba);
+        }
+    }
 
     real_t rms = 0.0;
     for (auto x : R.data) rms += x * x;
