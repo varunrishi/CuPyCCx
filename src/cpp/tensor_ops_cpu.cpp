@@ -18,7 +18,7 @@ static bool s_gpu = false;
 void init(bool use_gpu) {
 #ifdef CUPYCCX_CUDA
     if (use_gpu) {
-        extern void gpu_backend_init();
+        extern "C" void gpu_backend_init();
         gpu_backend_init();
         s_gpu = true;
         return;
@@ -30,7 +30,7 @@ void init(bool use_gpu) {
 void finalize() {
 #ifdef CUPYCCX_CUDA
     if (s_gpu) {
-        extern void gpu_backend_finalize();
+        extern "C" void gpu_backend_finalize();
         gpu_backend_finalize();
         s_gpu = false;
         return;
