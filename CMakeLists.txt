@@ -128,10 +128,8 @@ if(CUPYCCX_CUDA)
         CUDA::cublas
         Eigen3::Eigen
     )
-    # Set CUDA-specific compile options
     set_target_properties(cupyccx_cuda PROPERTIES
-        CUDA_SEPARABLE_COMPILATION ON
-        POSITION_INDEPENDENT_CODE  ON
+        POSITION_INDEPENDENT_CODE ON
     )
     target_link_libraries(cupyccx_core PUBLIC cupyccx_cuda)
 endif()
