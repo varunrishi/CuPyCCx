@@ -268,3 +268,16 @@ def test_n2_lccd_energy(n2_sto3g_rhf):
     result = run_from_pyscf(n2_sto3g_rhf, method="LCCD", opts=opts, verbose=False)
     assert result.converged
     assert abs(result.e_corr - (-0.16290979)) < 1e-5
+
+
+@skip_both
+def test_n2_pccd_alpha1_beta1_matches_ccd(n2_sto3g_rhf):
+    """pCCD(alpha=1, beta=1) must recover full CCD on N2/STO-3G."""
+    from cupyccx.pyscf_interface import run_from_pyscf
+    from cupyccx.method import CCOptions
+    opts = CCOptions(max_iter=200, conv_energy=1e-9, conv_amp=1e-8)
+    r_ccd  = run_from_pyscf(n2_sto3g_rhf, method="CCD",  opts=opts, verbose=False)
+    r_pccd = run_from_pyscf(n2_sto3g_rhf, method="pCCD", opts=opts, verbose=False,
+                            alpha=1.0, beta=1.0)
+    assert r_pccd.converged
+    assert abs(r_pccd.e_corr - r_ccd.e_corr) < 1e-7
