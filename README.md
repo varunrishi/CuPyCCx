@@ -8,6 +8,12 @@
   <strong>Author: <a href="https://github.com/varunrishi">Varun Rishi</a></strong>
 </p>
 
+<p align="center">
+  <a href="https://doi.org/10.1063/1.4944087">
+    <img src="https://img.shields.io/badge/DOI-10.1063%2F1.4944087-blue?style=flat-square" alt="DOI"/>
+  </a>
+</p>
+
 ## Methods
 
 | Class  | Description |
