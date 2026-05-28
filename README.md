@@ -14,7 +14,7 @@
 |--------|-------------|
 | `LCCD` | Linearized CCD — quadratic T₂ terms dropped |
 | `CCD`  | Full Coupled Cluster Doubles |
-| `DCD`  | Distinguishable Cluster Doubles (Kats & Manby 2013) — Coulomb ring only |
+| `DCD`  | Distinguishable Cluster Doubles (Kats & Manby 2013) — three explicit quadratic terms with plain Coulomb ERIs |
 | `pCCD` | Parameterized CCD — interpolates between LCCD and CCD via α, β |
 
 All methods work in the **spin-orbital** basis. `CCD` and `LCCD` use antisymmetrized ERIs `<pq‖rs>`; `DCD` and `pCCD` additionally require plain Coulomb ERIs `<pq|rs>` (provided automatically by `prepare_from_pyscf`).
@@ -123,6 +123,17 @@ mf  = scf.RHF(mol).run()
 result = run_from_pyscf(mf, method="CCD", verbose=True)
 print(f"CCD E_corr = {result.e_corr:.10f} Ha")
 ```
+
+### DCD via `run_from_pyscf`
+
+```python
+result = run_from_pyscf(mf, method="DCD", verbose=True)
+print(f"DCD E_corr = {result.e_corr:.10f} Ha")
+```
+
+DCD replaces the CCD ring-ring quadratic term with three terms from Kats & Manby (2013):
+two using antisymmetric ERIs with P(ij) and P(ab) permutations, and one using plain
+Coulomb ERIs `<pq|rs>` with the full P(ij)P(ab) permutation.
 
 ### pCCD via `run_from_pyscf`
 
