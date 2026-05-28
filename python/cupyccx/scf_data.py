@@ -64,6 +64,7 @@ class SCFInputData:
     eps: np.ndarray
     fock: np.ndarray
     eri_antisym: np.ndarray
+    eri_plain: Optional[np.ndarray] = None   # <pq|rs> without exchange subtraction
     reference: str = "RHF"
 
     @property
@@ -83,8 +84,7 @@ class SCFInputData:
 
     def save(self, path: str) -> None:
         """Save all arrays to a compressed ``.npz`` file."""
-        np.savez_compressed(
-            path,
+        arrays = dict(
             n_occ=np.array(self.n_occ),
             n_vir=np.array(self.n_vir),
             e_scf=np.array(self.e_scf),
@@ -93,6 +93,9 @@ class SCFInputData:
             eri_antisym=self.eri_antisym,
             reference=np.array(self.reference),
         )
+        if self.eri_plain is not None:
+            arrays["eri_plain"] = self.eri_plain
+        np.savez_compressed(path, **arrays)
 
     @classmethod
     def load(cls, path: str) -> "SCFInputData":
@@ -105,6 +108,7 @@ class SCFInputData:
             eps=d["eps"],
             fock=d["fock"],
             eri_antisym=d["eri_antisym"],
+            eri_plain=d["eri_plain"] if "eri_plain" in d else None,
             reference=str(d["reference"]),
         )
 
@@ -277,9 +281,10 @@ def _prepare_rhf(mf, frozen, verbose: bool) -> SCFInputData:
     beta_vir  = list(range(na + n_act_occ, n_so))
     order = alpha_occ + beta_occ + alpha_vir + beta_vir
 
-    eps_out  = eps_so[order]
-    fock_out = fock_so[np.ix_(order, order)]
-    eri_out  = eri_antisym[np.ix_(order, order, order, order)]
+    eps_out       = eps_so[order]
+    fock_out      = fock_so[np.ix_(order, order)]
+    eri_out       = eri_antisym[np.ix_(order, order, order, order)]
+    eri_plain_out = eri_so[np.ix_(order, order, order, order)]
 
     n_occ_so = 2 * n_act_occ
     n_vir_so = 2 * n_act_vir
@@ -297,6 +302,7 @@ def _prepare_rhf(mf, frozen, verbose: bool) -> SCFInputData:
         eps=eps_out,
         fock=fock_out,
         eri_antisym=eri_out,
+        eri_plain=eri_plain_out,
         reference="RHF",
     )
 
@@ -384,9 +390,10 @@ def _prepare_uhf(mf, frozen, verbose: bool) -> SCFInputData:
     beta_vir  = list(range(na + n_act_occ_b, n_so))
     order = alpha_occ + beta_occ + alpha_vir + beta_vir
 
-    eps_out  = eps_so[order]
-    fock_out = fock_so[np.ix_(order, order)]
-    eri_out  = eri_antisym[np.ix_(order, order, order, order)]
+    eps_out       = eps_so[order]
+    fock_out      = fock_so[np.ix_(order, order)]
+    eri_out       = eri_antisym[np.ix_(order, order, order, order)]
+    eri_plain_out = eri_so[np.ix_(order, order, order, order)]
 
     n_occ_so = n_act_occ_a + n_act_occ_b
     n_vir_so = (na - n_act_occ_a) + (nb - n_act_occ_b)
@@ -404,6 +411,7 @@ def _prepare_uhf(mf, frozen, verbose: bool) -> SCFInputData:
         eps=eps_out,
         fock=fock_out,
         eri_antisym=eri_out,
+        eri_plain=eri_plain_out,
         reference="UHF",
     )
 

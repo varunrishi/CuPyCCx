@@ -70,6 +70,7 @@ public:
 private:
     real_t build_residual(const Tensor4& t2,
                           const Tensor4& oovv,
+                          const Tensor4& oovv_plain,
                           const Tensor4& vvvv,
                           const Tensor4& oooo,
                           const Tensor4& ovvo,
@@ -102,6 +103,7 @@ private:
 
     real_t build_residual(const Tensor4& t2,
                           const Tensor4& oovv,
+                          const Tensor4& oovv_plain,
                           const Tensor4& vvvv,
                           const Tensor4& oooo,
                           const Tensor4& ovvo,

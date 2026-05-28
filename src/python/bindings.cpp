@@ -199,11 +199,13 @@ eri_antisym : ndarray, shape (n_mo, n_mo, n_mo, n_mo)
            const py::array_t<double>& eps,
            const py::array_t<double>& fock,
            const py::array_t<double>& eri,
+           const py::array_t<double>& eri_plain,
            const cupyccx::CCOptions&  opts,
            double e_scf,
            py::object callback) -> cupyccx::CCResult
         {
             auto scf = make_scf_data(n_occ, n_vir, eps, fock, eri);
+            scf.eri_plain = numpy_to_tensor4(eri_plain);
             cupyccx::DCD solver(scf, opts);
             if (!callback.is_none()) {
                 solver.set_callback([&callback](int it, double e, double de, double rms) {
@@ -214,6 +216,7 @@ eri_antisym : ndarray, shape (n_mo, n_mo, n_mo, n_mo)
         },
         py::arg("n_occ"), py::arg("n_vir"),
         py::arg("eps"), py::arg("fock"), py::arg("eri_antisym"),
+        py::arg("eri_plain"),
         py::arg("opts")     = cupyccx::CCOptions{},
         py::arg("e_scf")    = 0.0,
         py::arg("callback") = py::none(),
@@ -224,6 +227,7 @@ eri_antisym : ndarray, shape (n_mo, n_mo, n_mo, n_mo)
            const py::array_t<double>& eps,
            const py::array_t<double>& fock,
            const py::array_t<double>& eri,
+           const py::array_t<double>& eri_plain,
            double alpha,
            double beta,
            const cupyccx::CCOptions&  opts,
@@ -231,6 +235,7 @@ eri_antisym : ndarray, shape (n_mo, n_mo, n_mo, n_mo)
            py::object callback) -> cupyccx::CCResult
         {
             auto scf = make_scf_data(n_occ, n_vir, eps, fock, eri);
+            scf.eri_plain = numpy_to_tensor4(eri_plain);
             cupyccx::pCCD solver(scf, opts, alpha, beta);
             if (!callback.is_none()) {
                 solver.set_callback([&callback](int it, double e, double de, double rms) {
@@ -241,6 +246,7 @@ eri_antisym : ndarray, shape (n_mo, n_mo, n_mo, n_mo)
         },
         py::arg("n_occ"), py::arg("n_vir"),
         py::arg("eps"), py::arg("fock"), py::arg("eri_antisym"),
+        py::arg("eri_plain"),
         py::arg("alpha")    = 1.0,
         py::arg("beta")     = 1.0,
         py::arg("opts")     = cupyccx::CCOptions{},

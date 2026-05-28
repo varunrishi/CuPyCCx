@@ -50,6 +50,9 @@ struct SCFData {
     // Two-electron integrals in physicist notation <pq||rs> (antisymmetrized)
     // Stored as flat Tensor4(n_mo, n_mo, n_mo, n_mo)
     Tensor4 eri_antisym;
+    // Plain (non-antisymmetric) integrals <pq|rs> — required by DCD/pCCD for
+    // the D_c and D_x quadratic diagrams; empty for CCD/LCCD callers
+    Tensor4 eri_plain;
 };
 
 // Options controlling a coupled-cluster calculation

@@ -22,6 +22,18 @@ inline Tensor4 slice_oovv(const SCFData& scf) {
     return oovv;
 }
 
+// <ij|ab> plain Coulomb (not antisymmetrized) — used by DCD/pCCD for D_c and D_x
+inline Tensor4 slice_oovv_plain(const SCFData& scf) {
+    const int o = scf.n_occ, v = scf.n_vir;
+    Tensor4 oovv(o, o, v, v);
+    for (int i = 0; i < o; ++i)
+    for (int j = 0; j < o; ++j)
+    for (int a = 0; a < v; ++a)
+    for (int b = 0; b < v; ++b)
+        oovv(i, j, a, b) = scf.eri_plain(i, j, o + a, o + b);
+    return oovv;
+}
+
 // <ab||cd>  (a,b,c,d = vir) — ladder diagram integral
 inline Tensor4 slice_vvvv(const SCFData& scf) {
     const int o = scf.n_occ, v = scf.n_vir;

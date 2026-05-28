@@ -83,13 +83,16 @@ def run_from_pyscf(
         solver = pCCD(
             data.n_occ, data.n_vir,
             data.eps, data.fock, data.eri_antisym,
-            alpha=alpha, beta=beta, opts=opts or CCOptions(),
+            alpha=alpha, beta=beta,
+            eri_plain=data.eri_plain,
+            opts=opts or CCOptions(),
         )
     else:
         solver_cls = _METHODS[method]
         solver = solver_cls(
             data.n_occ, data.n_vir,
             data.eps, data.fock, data.eri_antisym,
+            eri_plain=data.eri_plain,
             opts=opts or CCOptions(),
         )
     return solver.compute(e_scf=data.e_scf, verbose=verbose)

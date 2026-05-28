@@ -90,6 +90,7 @@ real_t CCD::build_residual(const Tensor4& t2,
         R(i, j, a, b) -= sij - sji;
     }
 
+    // Q_B: These two below terms constitute B
     // (1/2) W_{klij} t_{kl}^{ab}  — W = bare <kl||ij> for LCCD
     tensor_ops::contract_klij_klab(W_oooo, t2, R, 0.5);
 
@@ -112,7 +113,7 @@ real_t CCD::build_residual(const Tensor4& t2,
         R(i, j, a, b) += s;
     }
 
-    // (1/2) P(ij)P(ab) sum_{klcd} <kl||cd> t_{ik}^{ac} t_{jl}^{bd}
+    // Q_D: (1/2) P(ij)P(ab) sum_{klcd} <kl||cd> t_{ik}^{ac} t_{jl}^{bd}
     // (quadratic ring-ring from dressed W_{mbej} intermediate; CCD only)
     if (variant_ != "LCCD") {
         // X(i,a,l,d) = sum_{k,c} oovv(k,l,c,d) * t2(i,k,a,c)
@@ -142,7 +143,7 @@ real_t CCD::build_residual(const Tensor4& t2,
             R(i, j, a, b) += 0.5 * s;
         }
 
-        // Dressed F_vv: ΔF_vv(b,e) = -(1/2) Σ_{k,l,d} <kl||ed> t_{kl}^{bd}
+        // Q_C: Dressed F_vv: ΔF_vv(b,e) = -(1/2) Σ_{k,l,d} <kl||ed> t_{kl}^{bd}
         // Contribution to residual: P(ab) Σ_e ΔF_vv(b,e) t_{ij}^{ae}
         {
             Matrix dF_vv(v, v);
@@ -168,7 +169,7 @@ real_t CCD::build_residual(const Tensor4& t2,
             }
         }
 
-        // Dressed F_oo: ΔF_oo(k,j) = +(1/2) Σ_{l,c,d} <kl||cd> t_{jl}^{cd}
+        // Q_A: Dressed F_oo: ΔF_oo(k,j) = +(1/2) Σ_{l,c,d} <kl||cd> t_{jl}^{cd}
         // Contribution to residual: -P(ij) Σ_k ΔF_oo(k,j) t_{ik}^{ab}
         {
             Matrix dF_oo(o, o);
@@ -284,42 +285,43 @@ CCResult CCD::compute(real_t e_scf) {
 // ---------------------------------------------------------------------------
 // Compute Q[i,j,a,b] = sum of quadratic T2*T2 diagrams (pre-symmetrisation).
 //
-// DCD uses:   DCD_1C + 0.5*(DCD_3 + DCD_4)
-// pCCD uses:  beta*(DCD_1C+DCD_1X+DCD_3) + alpha*(0.5*DCD_4+DCD_5) + 0.5*DCD_4
+// After calling this, the caller adds Q[i,j,a,b] + Q[j,i,b,a] to R.
 //
-// After calling this, the caller should add Q[i,j,a,b] + Q[j,i,b,a] to R.
+// Parameter → diagram mapping (P-term computes exactly the einsum shown):
+//   cDc (P1): D_c = sum_{k,l,c,d} oovv_plain(k,l,c,d) * t2(i,l,a,d) * t2(k,j,c,b)
+//   cC  (P2): C   = sum_{k,l,c,d} oovv(k,l,c,d)       * t2(k,l,a,d) * t2(i,j,c,b)
+//   cA  (P3): A   = sum_{k,l,c,d} oovv(k,l,c,d)       * t2(i,l,c,d) * t2(k,j,a,b)
+//   cDx (P4): D_x = sum_{k,l,c,d} oovv_plain(k,l,c,d) * t2(i,l,d,b) * t2(k,j,a,c)
+//   cB  (P5): B   = sum_{k,l,c,d} oovv(k,l,c,d)       * t2(i,j,c,d) * t2(k,l,a,b)
 //
-// All quadratic terms reduce to five index patterns (using antisymmetry of
-// oovv and t2 to simplify the einsum expressions):
+// Verified relationship to CCD quadratics (at CCD fixed point, diff ~1e-17):
+//   Q_D = (1/2)*(sym(P1_antisym) - sym(P4_antisym))
+//   Q_C = -(1/2)*sym(P2)
+//   Q_A = -(1/2)*sym(P3)
+//   Q_B = (1/8)*sym(P5)
+// where sym(X)[i,j,a,b] = X[i,j,a,b] + X[j,i,b,a].
 //
-//   P1[i,j,a,b] = sum_{k,l,c,d} oovv(k,l,c,d) * t2(i,l,a,d) * t2(k,j,c,b)
-//   P2[i,j,a,b] = sum_{k,l,c,d} oovv(k,l,c,d) * t2(k,l,a,d) * t2(i,j,c,b)
-//   P3[i,j,a,b] = sum_{k,l,c,d} oovv(k,l,c,d) * t2(i,l,c,d) * t2(k,j,a,b)
-//   P4[i,j,a,b] = sum_{k,l,c,d} oovv(k,l,c,d) * t2(i,l,d,b) * t2(k,j,a,c)
-//   P5[i,j,a,b] = sum_{k,l,c,d} oovv(k,l,c,d) * t2(i,j,c,d) * t2(k,l,a,b)
+// Symmetrisation note: B is self-conjugate (P5[j,i,b,a]=P5[i,j,a,b]), so
+// Q+Q' doubles its contribution. All other diagrams are not self-conjugate.
 //
-// Simplified coefficients (after applying antisymmetry to the Python einsum):
-//   DCD_1C         =  4.5 * P1
-//   DCD_1X         =  2.0 * P1 - 0.5 * P4
-//   DCD_3          = -3.0 * P2
-//   DCD_4          = -3.0 * P3
-//   DCD_5          =  0.5 * P5
-//
-// For DCD:     Q = 4.5*P1 - 1.5*P2 - 1.5*P3
-// For pCCD:    Q = (6.5*beta)*P1 - (0.5*beta)*P4 - (3*beta)*P2
-//                  - 1.5*(1+alpha)*P3 + (0.5*alpha)*P5
+// For DCD:   Coulomb ring (plain ERIs) + mixed ring-ladder (×1/2), no D_x, no B
+//            cDc=0.5(plain), cC=-0.25, cA=-0.25, cDx=0, cB=0
+// For pCCD:  pass oovv as oovv_plain so D uses antisym; at α=β=1 recovers CCD
+//            cDc=0.5β, cC=-0.5β, cA=-0.25(1+α), cDx=-0.5β, cB=α/8
 // ---------------------------------------------------------------------------
 static void build_quad_Q(
-        const Tensor4& oovv, const Tensor4& t2, int o, int v,
-        real_t c1,   // coeff of P1
-        real_t c2,   // coeff of P2
-        real_t c3,   // coeff of P3
-        real_t c4,   // coeff of P4
-        real_t c5,   // coeff of P5
+        const Tensor4& oovv,        // <kl||cd> antisym — used for C, A, B
+        const Tensor4& oovv_plain,  // <kl|cd>  plain   — used for D_c, D_x
+        const Tensor4& t2, int o, int v,
+        real_t cDc,  // coeff of D_c (P1)
+        real_t cC,   // coeff of C   (P2)
+        real_t cA,   // coeff of A   (P3)
+        real_t cDx,  // coeff of D_x (P4)
+        real_t cB,   // coeff of B   (P5); pass alpha/2 — B doubles under symmetrisation
         Tensor4& Q)
 {
-    // --- P1 via intermediate A[l,d,j,b] = sum_{k,c} oovv(k,l,c,d)*t2(k,j,c,b) ---
-    if (c1 != 0.0) {
+    // --- D_c via intermediate A[l,d,j,b] = sum_{k,c} oovv_plain(k,l,c,d)*t2(k,j,c,b) ---
+    if (cDc != 0.0) {
         Tensor4 A(o, v, o, v);   // A[l,d,j,b]
         for (int l = 0; l < o; ++l)
         for (int d = 0; d < v; ++d)
@@ -328,7 +330,7 @@ static void build_quad_Q(
             real_t s = 0.0;
             for (int k = 0; k < o; ++k)
             for (int c = 0; c < v; ++c)
-                s += oovv(k, l, c, d) * t2(k, jj, c, b);
+                s += oovv_plain(k, l, c, d) * t2(k, jj, c, b);
             A(l, d, jj, b) = s;
         }
         for (int i = 0; i < o; ++i)
@@ -339,12 +341,12 @@ static void build_quad_Q(
             for (int l = 0; l < o; ++l)
             for (int d = 0; d < v; ++d)
                 s += t2(i, l, a, d) * A(l, d, jj, b);
-            Q(i, jj, a, b) += c1 * s;
+            Q(i, jj, a, b) += cDc * s;
         }
     }
 
-    // --- P2 via intermediate B[a,c] = sum_{k,l,d} oovv(k,l,c,d)*t2(k,l,a,d) ---
-    if (c2 != 0.0) {
+    // --- C via intermediate B[a,c] = sum_{k,l,d} oovv(k,l,c,d)*t2(k,l,a,d) ---
+    if (cC != 0.0) {
         std::vector<real_t> B(v * v, 0.0);
         for (int a = 0; a < v; ++a)
         for (int c = 0; c < v; ++c) {
@@ -362,12 +364,12 @@ static void build_quad_Q(
             real_t s = 0.0;
             for (int c = 0; c < v; ++c)
                 s += B[a * v + c] * t2(i, jj, c, b);
-            Q(i, jj, a, b) += c2 * s;
+            Q(i, jj, a, b) += cC * s;
         }
     }
 
-    // --- P3 via intermediate C[k,i] = sum_{l,c,d} oovv(k,l,c,d)*t2(i,l,c,d) ---
-    if (c3 != 0.0) {
+    // --- A via intermediate C[k,i] = sum_{l,c,d} oovv(k,l,c,d)*t2(i,l,c,d) ---
+    if (cA != 0.0) {
         std::vector<real_t> C(o * o, 0.0);
         for (int k = 0; k < o; ++k)
         for (int i = 0; i < o; ++i) {
@@ -385,12 +387,12 @@ static void build_quad_Q(
             real_t s = 0.0;
             for (int k = 0; k < o; ++k)
                 s += C[k * o + i] * t2(k, jj, a, b);
-            Q(i, jj, a, b) += c3 * s;
+            Q(i, jj, a, b) += cA * s;
         }
     }
 
-    // --- P4 via intermediate H[k,c,i,b] = sum_{l,d} oovv(k,l,c,d)*t2(i,l,d,b) ---
-    if (c4 != 0.0) {
+    // --- D_x via intermediate H[k,c,i,b] = sum_{l,d} oovv_plain(k,l,c,d)*t2(i,l,d,b) ---
+    if (cDx != 0.0) {
         Tensor4 H(o, v, o, v);   // H[k,c,i,b]
         for (int k = 0; k < o; ++k)
         for (int c = 0; c < v; ++c)
@@ -399,7 +401,7 @@ static void build_quad_Q(
             real_t s = 0.0;
             for (int l = 0; l < o; ++l)
             for (int d = 0; d < v; ++d)
-                s += oovv(k, l, c, d) * t2(i, l, d, b);
+                s += oovv_plain(k, l, c, d) * t2(i, l, d, b);
             H(k, c, i, b) = s;
         }
         for (int i = 0; i < o; ++i)
@@ -410,12 +412,12 @@ static void build_quad_Q(
             for (int k = 0; k < o; ++k)
             for (int c = 0; c < v; ++c)
                 s += H(k, c, i, b) * t2(k, jj, a, c);
-            Q(i, jj, a, b) += c4 * s;
+            Q(i, jj, a, b) += cDx * s;
         }
     }
 
-    // --- P5 via intermediate M[c,d,a,b] = sum_{k,l} oovv(k,l,c,d)*t2(k,l,a,b) ---
-    if (c5 != 0.0) {
+    // --- B via intermediate M[c,d,a,b] = sum_{k,l} oovv(k,l,c,d)*t2(k,l,a,b) ---
+    if (cB != 0.0) {
         Tensor4 M(v, v, v, v);   // M[c,d,a,b]
         for (int c = 0; c < v; ++c)
         for (int d = 0; d < v; ++d)
@@ -435,7 +437,7 @@ static void build_quad_Q(
             for (int c = 0; c < v; ++c)
             for (int d = 0; d < v; ++d)
                 s += t2(i, jj, c, d) * M(c, d, a, b);
-            Q(i, jj, a, b) += c5 * s;
+            Q(i, jj, a, b) += cB * s;
         }
     }
 }
@@ -512,6 +514,7 @@ static real_t build_linear_residual(
 
 real_t DCD::build_residual(const Tensor4& t2,
                             const Tensor4& oovv,
+                            const Tensor4& oovv_plain,
                             const Tensor4& vvvv,
                             const Tensor4& oooo,
                             const Tensor4& ovvo,
@@ -523,11 +526,14 @@ real_t DCD::build_residual(const Tensor4& t2,
     // Linear terms (Fock + bare ladders + bare ring)
     build_linear_residual(t2, oovv, vvvv, oooo, ovvo, F_vv, F_oo, o, v, R);
 
-    // Quadratic DCD terms:  Q = 4.5*P1 - 1.5*P2 - 1.5*P3
+    // Quadratic DCD terms: Coulomb ring (plain) + half of mixed ring-ladder
     Tensor4 Q(o, o, v, v);
-    build_quad_Q(oovv, t2, o, v,
-                 /*c1=*/ 4.5,  /*c2=*/-1.5,  /*c3=*/-1.5,
-                 /*c4=*/ 0.0,  /*c5=*/ 0.0,
+    build_quad_Q(oovv, oovv_plain, t2, o, v,
+                 /*cDc=*/  0.5,   // Coulomb ring, plain ERIs
+                 /*cC=*/  -0.25,  // half of CCD mixed term
+                 /*cA=*/  -0.25,  // half of CCD mixed term
+                 /*cDx=*/  0.0,   // exchange ring dropped
+                 /*cB=*/   0.0,   // pure ladder dropped
                  Q);
 
     // Add symmetrised quadratic: Q[i,j,a,b] + Q[j,i,b,a]
@@ -548,7 +554,8 @@ CCResult DCD::compute(real_t e_scf) {
 
     const int o = scf_.n_occ, v = scf_.n_vir;
 
-    auto oovv = slice_oovv(scf_);
+    auto oovv       = slice_oovv(scf_);
+    auto oovv_plain = slice_oovv_plain(scf_);
     auto vvvv = slice_vvvv(scf_);
     auto oooo = slice_oooo(scf_);
     auto ovvo = slice_ovvo(scf_);
@@ -569,7 +576,7 @@ CCResult DCD::compute(real_t e_scf) {
     result.converged = false;
 
     for (int iter = 1; iter <= opts_.max_iter; ++iter) {
-        real_t rms = build_residual(t2, oovv, vvvv, oooo, ovvo, F_vv, F_oo, residual);
+        real_t rms = build_residual(t2, oovv, oovv_plain, vvvv, oooo, ovvo, F_vv, F_oo, residual);
 
         Tensor4 new_t2(o, o, v, v);
         for (std::size_t n = 0; n < t2.data.size(); ++n)
@@ -618,6 +625,7 @@ CCResult DCD::compute(real_t e_scf) {
 
 real_t pCCD::build_residual(const Tensor4& t2,
                               const Tensor4& oovv,
+                              const Tensor4& oovv_plain,
                               const Tensor4& vvvv,
                               const Tensor4& oooo,
                               const Tensor4& ovvo,
@@ -629,16 +637,15 @@ real_t pCCD::build_residual(const Tensor4& t2,
     // Linear terms (Fock + bare ladders + bare ring)
     build_linear_residual(t2, oovv, vvvv, oooo, ovvo, F_vv, F_oo, o, v, R);
 
-    // pCCD quadratic:
-    //   Q = (6.5*beta)*P1 - (0.5*beta)*P4 - (3*beta)*P2
-    //       - 1.5*(1+alpha)*P3 + (0.5*alpha)*P5
+    // pCCD quadratic: A/2 + alpha*(A/2+B) + beta*(C+D),  D uses antisym ERIs
+    // Pass oovv for oovv_plain so P1/P4 use antisym → pCCD(1,1) == CCD exactly
     Tensor4 Q(o, o, v, v);
-    build_quad_Q(oovv, t2, o, v,
-                 /*c1=*/  6.5 * beta_,
-                 /*c2=*/ -3.0 * beta_,
-                 /*c3=*/ -1.5 * (1.0 + alpha_),
-                 /*c4=*/ -0.5 * beta_,
-                 /*c5=*/  0.5 * alpha_,
+    build_quad_Q(oovv, oovv, t2, o, v,
+                 /*cDc=*/  0.5 * beta_,
+                 /*cC=*/  -0.5 * beta_,
+                 /*cA=*/  -0.25 * (1.0 + alpha_),
+                 /*cDx=*/ -0.5 * beta_,
+                 /*cB=*/   alpha_ / 8.0,
                  Q);
 
     for (int i = 0; i < o; ++i)
@@ -658,7 +665,8 @@ CCResult pCCD::compute(real_t e_scf) {
 
     const int o = scf_.n_occ, v = scf_.n_vir;
 
-    auto oovv = slice_oovv(scf_);
+    auto oovv       = slice_oovv(scf_);
+    auto oovv_plain = slice_oovv_plain(scf_);
     auto vvvv = slice_vvvv(scf_);
     auto oooo = slice_oooo(scf_);
     auto ovvo = slice_ovvo(scf_);
@@ -679,7 +687,7 @@ CCResult pCCD::compute(real_t e_scf) {
     result.converged = false;
 
     for (int iter = 1; iter <= opts_.max_iter; ++iter) {
-        real_t rms = build_residual(t2, oovv, vvvv, oooo, ovvo, F_vv, F_oo, residual);
+        real_t rms = build_residual(t2, oovv, oovv_plain, vvvv, oooo, ovvo, F_vv, F_oo, residual);
 
         Tensor4 new_t2(o, o, v, v);
         for (std::size_t n = 0; n < t2.data.size(); ++n)

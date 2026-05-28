@@ -79,6 +79,7 @@ class _CCDSolver:
                  eps: np.ndarray,
                  fock: np.ndarray,
                  eri_antisym: np.ndarray,
+                 eri_plain: Optional[np.ndarray] = None,
                  opts: Optional[CCOptions] = None):
         """
         Parameters
@@ -93,6 +94,8 @@ class _CCDSolver:
             Fock matrix in the MO basis.
         eri_antisym : ndarray, shape (n_mo, n_mo, n_mo, n_mo)
             Antisymmetrized ERIs <pq||rs> in physicist notation.
+        eri_plain : ndarray, optional
+            Plain (non-antisymmetrized) ERIs <pq|rs>; required for DCD/pCCD.
         opts : CCOptions, optional
             Solver options (defaults used if None).
         """
@@ -101,6 +104,8 @@ class _CCDSolver:
         self.eps    = np.ascontiguousarray(eps, dtype=np.float64)
         self.fock   = np.ascontiguousarray(fock, dtype=np.float64)
         self.eri    = np.ascontiguousarray(eri_antisym, dtype=np.float64)
+        self.eri_plain = (np.ascontiguousarray(eri_plain, dtype=np.float64)
+                          if eri_plain is not None else None)
         self.opts   = opts or CCOptions()
 
     @classmethod
@@ -116,6 +121,7 @@ class _CCDSolver:
         return cls(
             data.n_occ, data.n_vir,
             data.eps, data.fock, data.eri_antisym,
+            eri_plain=data.eri_plain,
             opts=opts,
         )
 
@@ -227,12 +233,16 @@ class DCD(_CCDSolver):
             if callback is not None:
                 callback(it, e, de, rms)
 
+        if self.eri_plain is None:
+            raise ValueError("DCD requires eri_plain (plain Coulomb ERIs). "
+                             "Use from_scf_data() or pass eri_plain to the constructor.")
+
         ext_opts = self.opts._to_ext()
         ext_opts.method = "DCD"
 
         ext_result = _ext.run_dcd(
             self.n_occ, self.n_vir,
-            self.eps, self.fock, self.eri,
+            self.eps, self.fock, self.eri, self.eri_plain,
             ext_opts, e_scf, _cb,
         )
 
@@ -271,8 +281,9 @@ class pCCD(_CCDSolver):
                  eri_antisym: np.ndarray,
                  alpha: float = 1.0,
                  beta: float = 1.0,
+                 eri_plain: Optional[np.ndarray] = None,
                  opts: Optional[CCOptions] = None):
-        super().__init__(n_occ, n_vir, eps, fock, eri_antisym, opts)
+        super().__init__(n_occ, n_vir, eps, fock, eri_antisym, eri_plain=eri_plain, opts=opts)
         self.alpha = alpha
         self.beta = beta
 
@@ -284,7 +295,9 @@ class pCCD(_CCDSolver):
         return cls(
             data.n_occ, data.n_vir,
             data.eps, data.fock, data.eri_antisym,
-            alpha=alpha, beta=beta, opts=opts,
+            alpha=alpha, beta=beta,
+            eri_plain=data.eri_plain,
+            opts=opts,
         )
 
     def compute(self,
@@ -307,12 +320,16 @@ class pCCD(_CCDSolver):
             if callback is not None:
                 callback(it, e, de, rms)
 
+        if self.eri_plain is None:
+            raise ValueError("pCCD requires eri_plain (plain Coulomb ERIs). "
+                             "Use from_scf_data() or pass eri_plain to the constructor.")
+
         ext_opts = self.opts._to_ext()
         ext_opts.method = "pCCD"
 
         ext_result = _ext.run_pccd(
             self.n_occ, self.n_vir,
-            self.eps, self.fock, self.eri,
+            self.eps, self.fock, self.eri, self.eri_plain,
             self.alpha, self.beta,
             ext_opts, e_scf, _cb,
         )
