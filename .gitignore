@@ -33,6 +33,7 @@ htmlcov/
 # Local
 .cache/
 .claude/
+CLAUDE.md
 CCD_DEBUG_PROGRESS.md
 build.sh
 build_cpp_tests/

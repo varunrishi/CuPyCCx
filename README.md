@@ -53,7 +53,8 @@ CuPyCCx/
 │   └── python/            # pytest tests
 ├── examples/
 │   ├── basic_ccd.py       # standalone (no PySCF required)
-│   └── pyscf_h2o.py       # H₂O CCD via PySCF integrals
+│   ├── pyscf_h2o.py       # H₂O CCD/LCCD via PySCF integrals
+│   └── n2_sto3g.py        # N₂/STO-3G: all four methods with reference energies
 ├── CMakeLists.txt
 └── pyproject.toml
 ```
