@@ -148,6 +148,12 @@ if(CUPYCCX_BUILD_PYTHON)
         src/python/bindings.cpp
     )
     target_link_libraries(_cupyccx PRIVATE cupyccx_core)
+    if(CUPYCCX_CUDA)
+        # Explicitly link cupyccx_cuda so its symbols (gpu_backend_init, etc.)
+        # are pulled into the shared library — transitive static libs alone are
+        # not enough on Linux when the shared lib is the final link target.
+        target_link_libraries(_cupyccx PRIVATE cupyccx_cuda)
+    endif()
     target_include_directories(_cupyccx PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
     )
