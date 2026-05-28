@@ -50,7 +50,7 @@ jobs:
           apt-get install -y python3-pip cmake ninja-build libeigen3-dev libopenblas-dev
 
       - name: Install build backend
-        run: pip3 install scikit-build-core pybind11 numpy
+        run: pip3 install --upgrade pip && pip3 install scikit-build-core pybind11 numpy
 
       - name: Build with CUDA enabled (sm_75 = Turing/T4)
         run: |
