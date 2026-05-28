@@ -93,13 +93,14 @@ void gpu_contract_klij_klab(const Tensor4& W, const Tensor4& T2,
 
     // W stored as [kl, ij]; need W^T[ij, kl] * T2[kl, vv]
     // Use cuBLAS: C[oo_ij, vv] = alpha * W^T[oo_ij, oo_kl] * T2[oo_kl, vv]
+    const double one = 1.0;
     CUBLAS_CHECK(cublasDgemm(s_handle->handle,
                              CUBLAS_OP_N,  CUBLAS_OP_T,  // B^T then A^T in col-major
                              vv, oo, oo,
                              &alpha,
                              d_T2.ptr, vv,
                              d_W.ptr,  oo,
-                             &alpha,   // beta=alpha here since we accumulate
+                             &one,     // beta=1: accumulate into R
                              d_R.ptr,  vv));
 
     d_R.download(R.ptr(), oo * vv);
@@ -129,13 +130,14 @@ void gpu_contract_abcd_ijcd(const Tensor4& W, const Tensor4& T2,
     d_R.upload(R.ptr(),   oo * vv);
 
     // R[oo, vv_ab] += alpha * T2[oo, vv_cd] * W^T[vv_cd, vv_ab]
+    const double one = 1.0;
     CUBLAS_CHECK(cublasDgemm(s_handle->handle,
                              CUBLAS_OP_T,  CUBLAS_OP_N,
                              vv, oo, vv,
                              &alpha,
                              d_W.ptr,  vv,
                              d_T2.ptr, vv,
-                             &alpha,
+                             &one,     // beta=1: accumulate into R
                              d_R.ptr,  vv));
 
     d_R.download(R.ptr(), oo * vv);
