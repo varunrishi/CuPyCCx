@@ -15,6 +15,9 @@
   <a href="https://doi.org/10.1063/1.4944087">
     <img src="https://img.shields.io/badge/DOI-10.1063%2F1.4944087-blue?style=flat-square" alt="DOI"/>
   </a>
+  <a href="https://colab.research.google.com/github/varunrishi/CuPyCCx/blob/master/examples/colab_gpu_test.ipynb">
+    <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open in Colab"/>
+  </a>
 </p>
 
 ## Methods
@@ -178,6 +181,10 @@ from cupyccx.method import CCD, CCOptions
 
 result = CCD(..., opts=CCOptions(use_gpu=True)).compute(verbose=True)
 ```
+
+> **Try it on a free GPU →** [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/varunrishi/CuPyCCx/blob/master/examples/colab_gpu_test.ipynb)
+>
+> The notebook builds CuPyCCx with CUDA, runs CPU vs GPU correctness checks for CCD, DCD, and pCCD on N₂, and benchmarks the speedup on a larger cc-pVDZ system.
 
 ## Running tests
 
