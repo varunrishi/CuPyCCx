@@ -55,6 +55,7 @@ def main():
     systems = [
         ("sto-3g",  "N2/STO-3G  (small)"),
         ("cc-pVDZ", "N2/cc-pVDZ (medium)"),
+        ("cc-pVTZ", "N2/cc-pVTZ (large)"),
     ]
 
     print(f"Running {PROFILE_ITERS} GPU iterations per system")
