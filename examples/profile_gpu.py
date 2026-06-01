@@ -26,7 +26,7 @@ import time
 
 from pyscf import gto, scf
 from cupyccx.scf_data import prepare_from_pyscf
-from cupyccx.method import CCD, DCD, CCOptions
+from cupyccx.method import CCD, CCOptions
 
 PROFILE_ITERS = 5   # fixed iteration count — do not converge
 
@@ -53,22 +53,20 @@ def run_fixed(cls, data, n_iter, label):
 
 def main():
     systems = [
-        ("sto-3g",   "N2/STO-3G   (small)"),
-        ("cc-pVDZ",  "N2/cc-pVDZ  (medium)"),
-        ("cc-pVTZ",  "N2/cc-pVTZ  (large)"),
+        ("sto-3g",  "N2/STO-3G  (small)"),
+        ("cc-pVDZ", "N2/cc-pVDZ (medium)"),
     ]
 
-    print(f"Running {PROFILE_ITERS} GPU iterations per method/system")
-    print(f"{'Method':<6}  {'System':<30}  {'n_occ':>5}  {'n_vir':>5}  {'iters':>5}  {'wall':>8}")
-    print("-" * 72)
+    print(f"Running {PROFILE_ITERS} GPU iterations per system")
+    print(f"{'System':<30}  {'n_occ':>5}  {'n_vir':>5}  {'iters':>5}  {'wall':>8}")
+    print("-" * 65)
 
     for basis, label in systems:
         mol  = build_mol(basis)
         mf   = scf.RHF(mol).run()
         data = prepare_from_pyscf(mf, verbose=False)
 
-        run_fixed(CCD, data, PROFILE_ITERS, f"CCD  {label}")
-        run_fixed(DCD, data, PROFILE_ITERS, f"DCD  {label}")
+        run_fixed(CCD, data, PROFILE_ITERS, label)
 
     print("\nDone. Open the .nsys-rep file in Nsight Systems to inspect the timeline.")
 
