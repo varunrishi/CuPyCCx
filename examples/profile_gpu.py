@@ -22,8 +22,7 @@ Prerequisites:
     pip install -e . -C cmake.define.CUPYCCX_CUDA=ON -C cmake.define.CUPYCCX_CUDA_ARCH=<arch>
 """
 
-import sys, os, time
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "python"))
+import time
 
 from pyscf import gto, scf
 from cupyccx.scf_data import prepare_from_pyscf
