@@ -1,10 +1,10 @@
 //
 // GPU tensor contractions for cupyccx
 //
-// Each contraction is expressed as one or more cuBLAS DGEMM calls on device
-// memory.  Host arrays are uploaded to device, the kernel fires, and results
-// are accumulated back — all synchronously for now.  Async streams and
-// persistent device allocations can be added as a follow-up optimisation.
+// Persistent device buffers (s_d_W, s_d_T2, s_d_R) are allocated on first use
+// and reused across all contraction calls, eliminating per-call cudaMalloc /
+// cudaFree overhead identified as the primary bottleneck via Nsight Systems.
+// They are freed in gpu_backend_finalize().
 //
 
 #include "cuda_utils.cuh"
@@ -18,8 +18,21 @@ namespace cupyccx {
 // ---------------------------------------------------------------------------
 // Module-level state
 // ---------------------------------------------------------------------------
-static cuda_utils::CublasHandle* s_handle  = nullptr;
-static bool                       s_active  = false;
+static cuda_utils::CublasHandle*       s_handle = nullptr;
+static bool                            s_active  = false;
+
+// Persistent device buffers — survive across contraction calls and iterations.
+// s_d_W is shared between W_oooo (oo*oo) and W_vvvv (vv*vv); ensure() keeps
+// it large enough for whichever is bigger.
+static cuda_utils::DeviceBuffer<double> s_d_W;
+static cuda_utils::DeviceBuffer<double> s_d_T2;
+static cuda_utils::DeviceBuffer<double> s_d_R;
+
+// Grow the buffer to at least n elements; never shrinks.
+static void ensure(cuda_utils::DeviceBuffer<double>& buf, std::size_t n) {
+    if (buf.size < n)
+        buf = cuda_utils::DeviceBuffer<double>(n);
+}
 
 extern "C" {
 
@@ -31,51 +44,23 @@ void gpu_backend_init() {
 }
 
 void gpu_backend_finalize() {
+    // Free persistent buffers before destroying the cuBLAS handle.
+    s_d_W  = cuda_utils::DeviceBuffer<double>();
+    s_d_T2 = cuda_utils::DeviceBuffer<double>();
+    s_d_R  = cuda_utils::DeviceBuffer<double>();
     delete s_handle;
     s_handle = nullptr;
-    s_active = false;
+    s_active  = false;
 }
 
 }  // extern "C"
-
-// ---------------------------------------------------------------------------
-// Helper: DGEMM wrapper (row-major, all NoTrans)
-//
-//   C[M,N] += alpha * A[M,K] * B[K,N]
-//
-// cuBLAS is column-major, so we pass transposed arguments:
-//   C^T[N,M] += alpha * B^T[N,K] * A^T[K,M]
-// which in column-major is:
-//   cublasDgemm(handle, NoTrans, NoTrans, N, M, K, alpha, B, N, A, K, 1, C, N)
-// ---------------------------------------------------------------------------
-static void gpu_dgemm(int M, int N, int K,
-                      double alpha,
-                      const double* d_A,
-                      const double* d_B,
-                      double        beta,
-                      double*       d_C) {
-    CUBLAS_CHECK(cublasDgemm(s_handle->handle,
-                             CUBLAS_OP_N, CUBLAS_OP_N,
-                             N, M, K,
-                             &alpha,
-                             d_B, N,
-                             d_A, K,
-                             &beta,
-                             d_C, N));
-}
 
 namespace tensor_ops {
 
 // ---------------------------------------------------------------------------
 // (1/2) sum_{kl}  W_oooo[k,l,i,j] * T2[k,l,a,b]  →  R[i,j,a,b]
 //
-// Reshape:  W  as [oo, oo]   (first two = kl, last two = ij)
-//           T2 as [oo, vv]
-//           R  as [oo, vv]
-//
-// W is stored [k,l,i,j] so the (kl) stride is correct only if we see W as
-// W^T[ij, kl].  We want R[ij,ab] += alpha * W^T[ij,kl] * T2[kl,ab]
-// which is a standard DGEMM(M=oo, N=vv, K=oo).
+// R[ij,ab] += alpha * W^T[ij,kl] * T2[kl,ab]   (DGEMM: M=oo, N=vv, K=oo)
 // ---------------------------------------------------------------------------
 void gpu_contract_klij_klab(const Tensor4& W, const Tensor4& T2,
                              Tensor4& R, double alpha) {
@@ -83,37 +68,31 @@ void gpu_contract_klij_klab(const Tensor4& W, const Tensor4& T2,
     const int v  = static_cast<int>(T2.n2);
     const int oo = o * o, vv = v * v;
 
-    cuda_utils::DeviceBuffer<double> d_W(oo * oo);
-    cuda_utils::DeviceBuffer<double> d_T2(oo * vv);
-    cuda_utils::DeviceBuffer<double> d_R(oo * vv);
+    ensure(s_d_W,  oo * oo);
+    ensure(s_d_T2, oo * vv);
+    ensure(s_d_R,  oo * vv);
 
-    d_W.upload(W.ptr(),  oo * oo);
-    d_T2.upload(T2.ptr(), oo * vv);
-    d_R.upload(R.ptr(),  oo * vv);
+    s_d_W.upload(W.ptr(),   oo * oo);
+    s_d_T2.upload(T2.ptr(), oo * vv);
+    s_d_R.upload(R.ptr(),   oo * vv);
 
-    // W stored as [kl, ij]; need W^T[ij, kl] * T2[kl, vv]
-    // Use cuBLAS: C[oo_ij, vv] = alpha * W^T[oo_ij, oo_kl] * T2[oo_kl, vv]
     const double one = 1.0;
     CUBLAS_CHECK(cublasDgemm(s_handle->handle,
-                             CUBLAS_OP_N,  CUBLAS_OP_T,  // B^T then A^T in col-major
+                             CUBLAS_OP_N, CUBLAS_OP_T,
                              vv, oo, oo,
                              &alpha,
-                             d_T2.ptr, vv,
-                             d_W.ptr,  oo,
-                             &one,     // beta=1: accumulate into R
-                             d_R.ptr,  vv));
+                             s_d_T2.ptr, vv,
+                             s_d_W.ptr,  oo,
+                             &one,
+                             s_d_R.ptr,  vv));
 
-    d_R.download(R.ptr(), oo * vv);
+    s_d_R.download(R.ptr(), oo * vv);
 }
 
 // ---------------------------------------------------------------------------
 // (1/2) sum_{cd}  W_vvvv[a,b,c,d] * T2[i,j,c,d]  →  R[i,j,a,b]
 //
-// Reshape:  W  as [vv_ab, vv_cd]
-//           T2 as [oo,    vv_cd]
-//           R  as [oo,    vv_ab]
-//
-// R[oo, vv_ab] += alpha * T2[oo, vv_cd] * W^T[vv_cd, vv_ab]
+// R[oo,vv_ab] += alpha * T2[oo,vv_cd] * W^T[vv_cd,vv_ab]  (M=oo, N=vv, K=vv)
 // ---------------------------------------------------------------------------
 void gpu_contract_abcd_ijcd(const Tensor4& W, const Tensor4& T2,
                              Tensor4& R, double alpha) {
@@ -121,41 +100,35 @@ void gpu_contract_abcd_ijcd(const Tensor4& W, const Tensor4& T2,
     const int v  = static_cast<int>(T2.n2);
     const int oo = o * o, vv = v * v;
 
-    cuda_utils::DeviceBuffer<double> d_W(vv * vv);
-    cuda_utils::DeviceBuffer<double> d_T2(oo * vv);
-    cuda_utils::DeviceBuffer<double> d_R(oo * vv);
+    ensure(s_d_W,  vv * vv);
+    ensure(s_d_T2, oo * vv);
+    ensure(s_d_R,  oo * vv);
 
-    d_W.upload(W.ptr(),   vv * vv);
-    d_T2.upload(T2.ptr(), oo * vv);
-    d_R.upload(R.ptr(),   oo * vv);
+    s_d_W.upload(W.ptr(),   vv * vv);
+    s_d_T2.upload(T2.ptr(), oo * vv);
+    s_d_R.upload(R.ptr(),   oo * vv);
 
-    // R[oo, vv_ab] += alpha * T2[oo, vv_cd] * W^T[vv_cd, vv_ab]
     const double one = 1.0;
     CUBLAS_CHECK(cublasDgemm(s_handle->handle,
-                             CUBLAS_OP_T,  CUBLAS_OP_N,
+                             CUBLAS_OP_T, CUBLAS_OP_N,
                              vv, oo, vv,
                              &alpha,
-                             d_W.ptr,  vv,
-                             d_T2.ptr, vv,
-                             &one,     // beta=1: accumulate into R
-                             d_R.ptr,  vv));
+                             s_d_W.ptr,  vv,
+                             s_d_T2.ptr, vv,
+                             &one,
+                             s_d_R.ptr,  vv));
 
-    d_R.download(R.ptr(), oo * vv);
+    s_d_R.download(R.ptr(), oo * vv);
 }
 
 // ---------------------------------------------------------------------------
 // sum_{kc}  W_ovvo[k,b,c,j] * T2[i,k,a,c]  →  R[i,j,a,b]
 //
-// This contraction has mixed index ordering that does not map to a single
-// DGEMM.  We reformulate by looping over (a,b) pairs and calling DGEMM on
-// the (i,j) x (k,c) inner block.  For production code, a tensor transpose
-// can make this a single batched GEMM.
+// Mixed index ordering — falls back to CPU loops until a tensor-transpose
+// pass is added to reformulate as batched DGEMM.
 // ---------------------------------------------------------------------------
 void gpu_contract_kbcj_ikac(const Tensor4& W, const Tensor4& T2,
                              Tensor4& R, double alpha) {
-    // Fall back to CPU reference for now; the index permutation needed
-    // to express this as a DGEMM requires a prior tensor transpose pass.
-    // TODO: add cuTENSOR / batched DGEMM implementation.
     const int o = static_cast<int>(T2.n0);
     const int v = static_cast<int>(T2.n2);
     for (int i = 0; i < o; ++i)
