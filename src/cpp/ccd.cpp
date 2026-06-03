@@ -58,7 +58,8 @@ real_t CCD::build_residual(const Tensor4& t2,
                             const Tensor4& ovvo,
                             const Matrix&  F_vv,
                             const Matrix&  F_oo,
-                            Tensor4&       R) const {
+                            Tensor4&       R,
+                            bool           skip_quadratic) const {
     const int o = scf_.n_occ, v = scf_.n_vir;
 
     // Start from <ij||ab>
@@ -100,34 +101,36 @@ real_t CCD::build_residual(const Tensor4& t2,
     // P(ij)P(ab) <kb||cj> t_{ik}^{ac}
     tensor_ops::contract_kbcj_ikac_Pijab(ovvo, t2, R, 1.0);
 
-    // Q_D: (1/2) P(ij)P(ab) sum_{klcd} <kl||cd> t_{ik}^{ac} t_{jl}^{bd}
-    // (quadratic ring-ring from dressed W_{mbej} intermediate; CCD only)
     if (variant_ != "LCCD") {
-        // X(i,a,l,d) = sum_{k,c} oovv(k,l,c,d) * t2(i,k,a,c)
-        Tensor4 X(o, v, o, v);
-        for (int i = 0; i < o; ++i)
-        for (int a = 0; a < v; ++a)
-        for (int l = 0; l < o; ++l)
-        for (int d = 0; d < v; ++d) {
-            real_t s = 0.0;
-            for (int k = 0; k < o; ++k)
-            for (int c = 0; c < v; ++c)
-                s += oovv(k, l, c, d) * t2(i, k, a, c);
-            X(i, a, l, d) = s;
-        }
-        for (int i = 0; i < o; ++i)
-        for (int j = 0; j < o; ++j)
-        for (int a = 0; a < v; ++a)
-        for (int b = 0; b < v; ++b) {
-            real_t s = 0.0;
+        // Q_D: (1/2) P(ij)P(ab) sum_{klcd} <kl||cd> t_{ik}^{ac} t_{jl}^{bd}
+        // skip_quadratic=true when the GPU path supplies Q_D via contract_qD_Pijab.
+        if (!skip_quadratic) {
+            // X(i,a,l,d) = sum_{k,c} oovv(k,l,c,d) * t2(i,k,a,c)
+            Tensor4 X(o, v, o, v);
+            for (int i = 0; i < o; ++i)
+            for (int a = 0; a < v; ++a)
             for (int l = 0; l < o; ++l)
             for (int d = 0; d < v; ++d) {
-                s += X(i, a, l, d) * t2(j, l, b, d)   // base
-                   - X(j, a, l, d) * t2(i, l, b, d)   // P(ij)
-                   - X(i, b, l, d) * t2(j, l, a, d)   // P(ab)
-                   + X(j, b, l, d) * t2(i, l, a, d);  // P(ij)P(ab)
+                real_t s = 0.0;
+                for (int k = 0; k < o; ++k)
+                for (int c = 0; c < v; ++c)
+                    s += oovv(k, l, c, d) * t2(i, k, a, c);
+                X(i, a, l, d) = s;
             }
-            R(i, j, a, b) += 0.5 * s;
+            for (int i = 0; i < o; ++i)
+            for (int j = 0; j < o; ++j)
+            for (int a = 0; a < v; ++a)
+            for (int b = 0; b < v; ++b) {
+                real_t s = 0.0;
+                for (int l = 0; l < o; ++l)
+                for (int d = 0; d < v; ++d) {
+                    s += X(i, a, l, d) * t2(j, l, b, d)   // base
+                       - X(j, a, l, d) * t2(i, l, b, d)   // P(ij)
+                       - X(i, b, l, d) * t2(j, l, a, d)   // P(ab)
+                       + X(j, b, l, d) * t2(i, l, a, d);  // P(ij)P(ab)
+                }
+                R(i, j, a, b) += 0.5 * s;
+            }
         }
 
         // Q_C: Dressed F_vv: ΔF_vv(b,e) = -(1/2) Σ_{k,l,d} <kl||ed> t_{kl}^{bd}
@@ -221,11 +224,13 @@ CCResult CCD::compute(real_t e_scf) {
     for (int iter = 1; iter <= opts_.max_iter; ++iter) {
         real_t rms;
         if (tensor_ops::gpu_active()) {
-            // GPU path: pass bare vvvv/oooo (cached on device) directly — skip CPU W build.
-            // Q_B (T2 correction to both W tensors) is added via a separate GPU DGEMM pair.
-            rms = build_residual(t2, oovv, vvvv, oooo, ovvo, F_vv, F_oo, residual);
+            // GPU path: bare vvvv/oooo cached on device; skip CPU W build and
+            // skip CPU Q_D/Q_C/Q_A loops (pass skip_quadratic=true).
+            rms = build_residual(t2, oovv, vvvv, oooo, ovvo, F_vv, F_oo, residual,
+                                 /*skip_quadratic=*/true);
             if (variant_ != "LCCD") {
-                tensor_ops::contract_oovv_t2_t2(oovv, t2, residual, 0.25);
+                tensor_ops::contract_oovv_t2_t2(oovv, t2, residual, 0.25); // Q_B
+                tensor_ops::contract_qD_Pijab(oovv, t2, residual, 0.5);    // Q_D
                 real_t sum = 0.0;
                 for (auto x : residual.data) sum += x * x;
                 rms = std::sqrt(sum / residual.data.size());

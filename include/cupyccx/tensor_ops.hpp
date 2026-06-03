@@ -87,6 +87,13 @@ void contract_kbcj_ikac_Pijab(const Tensor4& W_ovvo,
 void contract_oovv_t2_t2(const Tensor4& oovv, const Tensor4& t2,
                           Tensor4& R, real_t alpha);
 
+// R[i,j,a,b] += alpha * P(ij)P(ab) sum_{k,l,c,d} oovv[k,l,c,d] * t2[i,k,a,c] * t2[j,l,b,d]
+// Q_D quadratic ring-ring term (CCD only). GPU: two ov×ov×ov DGEMMs + k_scatter_Pijab.
+// Replaces the CPU nested loop in build_residual when the GPU path is active.
+// Call with alpha=0.5 (the factor in front of the P(ij)P(ab) symmetrised term).
+void contract_qD_Pijab(const Tensor4& oovv, const Tensor4& t2,
+                        Tensor4& R, real_t alpha);
+
 // General batched DGEMM used internally by the GPU backend
 // C = alpha * A * B + beta * C  (row-major)
 void dgemm(int M, int N, int K,

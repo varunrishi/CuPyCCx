@@ -76,6 +76,21 @@ void contract_oovv_t2_t2(const Tensor4& oovv, const Tensor4& t2,
         "build with CUPYCCX_CUDA=ON.");
 }
 
+void contract_qD_Pijab(const Tensor4& oovv, const Tensor4& t2,
+                        Tensor4& R, real_t alpha) {
+#ifdef CUPYCCX_CUDA
+    if (s_gpu) {
+        extern void gpu_contract_qD_Pijab(const Tensor4&, const Tensor4&,
+                                           Tensor4&, real_t);
+        gpu_contract_qD_Pijab(oovv, t2, R, alpha);
+        return;
+    }
+#endif
+    throw std::runtime_error(
+        "tensor_ops::contract_qD_Pijab is GPU-only; "
+        "build with CUPYCCX_CUDA=ON.");
+}
+
 // ---------------------------------------------------------------------------
 // R[i,j,a,b] += alpha * sum_c  T2[i,j,a,c] * F_vv[b,c]
 // ---------------------------------------------------------------------------

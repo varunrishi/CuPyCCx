@@ -48,7 +48,8 @@ private:
                           const Tensor4& ovvo,
                           const Matrix&  F_vv,
                           const Matrix&  F_oo,
-                          Tensor4&       residual) const;
+                          Tensor4&       residual,
+                          bool           skip_quadratic = false) const;
 };
 
 

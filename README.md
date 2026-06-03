@@ -210,6 +210,7 @@ Tensor contractions are routed through the `tensor_ops` dispatcher
 - **Integral caching** — `gpu_upload_integrals()` uploads static W tensors (vvvv, oooo, ovvo) to the device once per molecule; DCD reuses them across all iterations.
 - **W_vvvv elimination** — CCD avoids building the O(v⁴) dressed W_vvvv on CPU; instead the Q_B correction is computed as two back-to-back DGEMMs on the device (`contract_oovv_t2_t2`).
 - **Ring P(ij)P(ab)** — all four permutation terms are fused into a single DGEMM + scatter kernel (`k_scatter_Pijab`), avoiding four separate passes.
+- **Q_D quadratic ring-ring** — the dominant O(o³v³) quadratic term is implemented as two ov×ov×ov DGEMMs on the device (`contract_qD_Pijab`), bypassing the CPU nested-loop fallback that caused a 15× slowdown at cc-pVTZ. Q_C and Q_A (smaller, O(o²v³)) remain on CPU.
 
 ### Pure-Python CuPy
 

@@ -396,5 +396,80 @@ void gpu_contract_oovv_t2_t2(const Tensor4& oovv, const Tensor4& T2,
     s_d_R.download(R.ptr(), oovv_n);
 }
 
+// ---------------------------------------------------------------------------
+// Q_D quadratic ring-ring:
+//   R[i,j,a,b] += alpha * P(ij)P(ab) * sum_{k,l,c,d} oovv[k,l,c,d] * t2[i,k,a,c] * t2[j,l,b,d]
+//
+// Step 1  permute T2[i,k,a,c] → T2_perm[i,a,k,c]  and  oovv[k,l,c,d] → oovv_perm[k,c,l,d]
+//         both as (ov, ov) matrices.
+//
+// Step 2  X[(ia),(ld)] = T2_perm[(ia),(kc)] @ oovv_perm[(kc),(ld)]   DGEMM ov×ov×ov
+//
+// Step 3  Z[(ia),(jb)] = X[(ia),(ld)] @ T2_perm^T[(ld),(jb)]          DGEMM ov×ov×ov
+//         (the alpha factor is folded into this DGEMM)
+//
+// Step 4  R[i,j,a,b] += P(ij)P(ab) scatter of Z  (k_scatter_Pijab)
+// ---------------------------------------------------------------------------
+void gpu_contract_qD_Pijab(const Tensor4& oovv, const Tensor4& t2,
+                             Tensor4& R, double alpha) {
+    const int o      = static_cast<int>(t2.n0);
+    const int v      = static_cast<int>(t2.n2);
+    const int ov     = o * v;
+    const int oovv_n = ov * ov;
+
+    ensure(s_d_oovv,   oovv_n);
+    ensure(s_d_T2_ov,  oovv_n);
+    ensure(s_d_T2_T,   oovv_n);   // T2_perm [i,a,k,c]
+    ensure(s_d_W_T,    oovv_n);   // oovv_perm [k,c,l,d]
+    ensure(s_d_R_ring, oovv_n);   // X intermediate [(ia),(ld)]
+    ensure(s_d_W_ovvo, oovv_n);   // Z intermediate [(ia),(jb)]
+    ensure(s_d_R,      oovv_n);
+
+    s_d_oovv.upload(oovv.ptr(), oovv_n);
+    s_d_T2_ov.upload(t2.ptr(),  oovv_n);
+    s_d_R.upload(R.ptr(),       oovv_n);
+
+    const int threads = 256;
+    const int blocks  = (oovv_n + threads - 1) / threads;
+
+    // T2_perm[i,a,k,c] ← t2[i,k,a,c]: permute (o,o,v,v) with perm 0,2,1,3
+    k_permute4d<<<blocks, threads>>>(s_d_T2_ov.ptr, s_d_T2_T.ptr,
+                                     o, o, v, v, 0, 2, 1, 3);
+
+    // oovv_perm[k,c,l,d] ← oovv[k,l,c,d]: permute (o,o,v,v) with perm 0,2,1,3
+    k_permute4d<<<blocks, threads>>>(s_d_oovv.ptr, s_d_W_T.ptr,
+                                     o, o, v, v, 0, 2, 1, 3);
+
+    const double zero = 0.0, one = 1.0;
+
+    // Step 2: X[(ia),(ld)] = T2_perm[(ia),(kc)] @ oovv_perm[(kc),(ld)]
+    // Row-major A @ B pattern: cublasDgemm(N,N, M, N, K, alpha, B, K, A, K, beta, C, N)
+    CUBLAS_CHECK(cublasDgemm(s_handle->handle,
+                             CUBLAS_OP_N, CUBLAS_OP_N,
+                             ov, ov, ov,
+                             &one,
+                             s_d_W_T.ptr,   ov,   // B = oovv_perm
+                             s_d_T2_T.ptr,  ov,   // A = T2_perm
+                             &zero,
+                             s_d_R_ring.ptr, ov)); // C = X
+
+    // Step 3: Z[(ia),(jb)] = X[(ia),(ld)] @ T2_perm^T[(ld),(jb)]   (alpha applied here)
+    // Row-major A @ B^T pattern: cublasDgemm(T,N, M, N, K, alpha, B, K, A, K, beta, C, N)
+    // where the "B^T" matrix (T2_perm) appears first in the call with op=T.
+    CUBLAS_CHECK(cublasDgemm(s_handle->handle,
+                             CUBLAS_OP_T, CUBLAS_OP_N,
+                             ov, ov, ov,
+                             &alpha,
+                             s_d_T2_T.ptr,  ov,    // B = T2_perm (op=T → transpose it)
+                             s_d_R_ring.ptr, ov,   // A = X
+                             &zero,
+                             s_d_W_ovvo.ptr, ov)); // C = Z
+
+    // Step 4: R[i,j,a,b] += P(ij)P(ab) Z[i,a,j,b]
+    k_scatter_Pijab<<<blocks, threads>>>(s_d_W_ovvo.ptr, s_d_R.ptr, o, v);
+
+    s_d_R.download(R.ptr(), oovv_n);
+}
+
 }  // namespace tensor_ops
 }  // namespace cupyccx
