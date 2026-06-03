@@ -48,6 +48,9 @@ void finalize() {
 
 bool gpu_active() { return s_gpu; }
 
+// No-op on CPU — only the CUDA backend uploads to device memory.
+void gpu_upload_integrals(const Tensor4&, const Tensor4&, const Tensor4&, const void*) {}
+
 // Stub: public dgemm symbol required by the header; only the CUDA backend
 // provides a real implementation via cuBLAS.
 void dgemm(int, int, int, real_t, const real_t*, const real_t*, real_t, real_t*) {

@@ -22,6 +22,15 @@ void finalize();
 // Returns true if the GPU backend is currently active.
 bool gpu_active();
 
+// Pre-upload static W integral tensors to device before the iteration loop.
+// Subsequent calls with the same cache_key (pass scf.eri_antisym.ptr()) are
+// no-ops — the device buffers are reused as long as the molecule/basis is
+// unchanged.  Benefits DCD/pCCD where vvvv/oooo are bare (static) integrals.
+void gpu_upload_integrals(const Tensor4& vvvv,
+                          const Tensor4& oooo,
+                          const Tensor4& ovvo,
+                          const void*    cache_key);
+
 // ---------------------------------------------------------------------------
 // Core contractions used by the CCD/LCCD residual equations
 // All arrays are assumed to be contiguous, row-major (C order).

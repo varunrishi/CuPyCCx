@@ -213,6 +213,9 @@ CCResult CCD::compute(real_t e_scf) {
     auto ovvo = slice_ovvo(scf_);
     auto D2   = make_D2(scf_);
 
+    if (tensor_ops::gpu_active())
+        tensor_ops::gpu_upload_integrals(vvvv, oooo, ovvo, scf_.eri_antisym.ptr());
+
     Matrix F_vv = scf_.fock.block(o, o, v, v);
     Matrix F_oo = scf_.fock.block(0, 0, o, o);
 
@@ -628,6 +631,9 @@ CCResult DCD::compute(real_t e_scf) {
     auto ovvo = slice_ovvo(scf_);
     auto D2   = make_D2(scf_);
 
+    if (tensor_ops::gpu_active())
+        tensor_ops::gpu_upload_integrals(vvvv, oooo, ovvo, scf_.eri_antisym.ptr());
+
     Matrix F_vv = scf_.fock.block(o, o, v, v);
     Matrix F_oo = scf_.fock.block(0, 0, o, o);
 
@@ -738,6 +744,9 @@ CCResult pCCD::compute(real_t e_scf) {
     auto oooo = slice_oooo(scf_);
     auto ovvo = slice_ovvo(scf_);
     auto D2   = make_D2(scf_);
+
+    if (tensor_ops::gpu_active())
+        tensor_ops::gpu_upload_integrals(vvvv, oooo, ovvo, scf_.eri_antisym.ptr());
 
     Matrix F_vv = scf_.fock.block(o, o, v, v);
     Matrix F_oo = scf_.fock.block(0, 0, o, o);
