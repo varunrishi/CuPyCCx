@@ -102,10 +102,10 @@ def main():
         data = prepare_from_pyscf(mf, verbose=False)
 
         run_fixed_cpp(CCD,  data, PROFILE_ITERS, f"C++  CCD  {label}")
-        run_fixed_cpp(DCD,  data, PROFILE_ITERS, f"C++  DCD  {label}")
+        # run_fixed_cpp(DCD,  data, PROFILE_ITERS, f"C++  DCD  {label}")
         if _CUPY_OK:
             run_fixed_py(PyCCD, data, PROFILE_ITERS, f"CuPy CCD  {label}")
-            run_fixed_py(PyDCD, data, PROFILE_ITERS, f"CuPy DCD  {label}")
+            # run_fixed_py(PyDCD, data, PROFILE_ITERS, f"CuPy DCD  {label}")
         print()
 
     print("Done. Open the .nsys-rep file in Nsight Systems to inspect the timeline.")
