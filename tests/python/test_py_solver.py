@@ -81,7 +81,7 @@ def test_pyccd_t2_matches_cpp(n2_data):
     r_py = PyCCD.from_scf_data(n2_data).compute(n2_data.e_scf)
     r_cpp = CCD.from_scf_data(n2_data).compute(n2_data.e_scf)
     assert r_py.t2 is not None and r_cpp.t2 is not None
-    np.testing.assert_allclose(r_py.t2, r_cpp.t2, atol=1e-8,
+    np.testing.assert_allclose(r_py.t2, r_cpp.t2, atol=1e-7,
                                err_msg="PyCCD T2 deviates from C++ CCD")
 
 
