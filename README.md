@@ -59,7 +59,7 @@ CuPyCCx/
 │   ├── cpp/               # CCD/LCCD drivers, CPU tensor contractions (BLAS)
 │   ├── cuda/              # cuBLAS GPU tensor contractions
 │   └── python/            # pybind11 bindings
-├── python/cupyccx/        # Python package (method.py, pyscf_interface.py)
+├── python/cupyccx/        # Python package (method.py, py_solver.py, pyscf_interface.py)
 ├── tests/
 │   ├── cpp/               # GoogleTest unit tests
 │   └── python/            # pytest tests
@@ -196,9 +196,50 @@ pytest tests/python/ -v
 ctest --test-dir build --output-on-failure
 ```
 
+## GPU backends
+
+CuPyCCx provides two independent GPU implementations that can be compared side-by-side:
+
+### Native CUDA (C++ extension)
+
+The primary path, activated by `CCOptions(use_gpu=True)` with a CUDA build.
+Tensor contractions are routed through the `tensor_ops` dispatcher
+(`include/cupyccx/tensor_ops.hpp`) to hand-written cuBLAS DGEMM kernels in
+`src/cuda/tensor_ops_gpu.cu`. Key optimisations:
+
+- **Integral caching** — `gpu_upload_integrals()` uploads static W tensors (vvvv, oooo, ovvo) to the device once per molecule; DCD reuses them across all iterations.
+- **W_vvvv elimination** — CCD avoids building the O(v⁴) dressed W_vvvv on CPU; instead the Q_B correction is computed as two back-to-back DGEMMs on the device (`contract_oovv_t2_t2`).
+- **Ring P(ij)P(ab)** — all four permutation terms are fused into a single DGEMM + scatter kernel (`k_scatter_Pijab`), avoiding four separate passes.
+
+### Pure-Python CuPy
+
+A transparent reference implementation in `python/cupyccx/py_solver.py`, also activated via `CCOptions(use_gpu=True)` (requires `pip install cupy-cuda12x`). Uses `xp.einsum` throughout — every contraction is annotated with the corresponding C++ line in `ccd.cpp` so energies and T₂ amplitudes can be cross-checked iteration-by-iteration.
+
+| Class   | GPU backend |
+|---------|-------------|
+| `CCD`   | cuBLAS DGEMM (C++ extension) |
+| `DCD`   | cuBLAS DGEMM (C++ extension) |
+| `PyCCD` | CuPy einsum |
+| `PyDCD` | CuPy einsum |
+
+```python
+from cupyccx.method import CCD, CCOptions
+from cupyccx.py_solver import PyCCD
+
+# C++ cuBLAS path
+r_cpp = CCD.from_scf_data(data, opts=CCOptions(use_gpu=True)).compute(data.e_scf)
+
+# CuPy einsum path (same answer, useful for debugging)
+r_py  = PyCCD.from_scf_data(data, opts=CCOptions(use_gpu=True)).compute(data.e_scf)
+
+print(abs(r_cpp.e_corr - r_py.e_corr))   # < 1e-8 Ha
+```
+
+Run `examples/profile_gpu.py` under Nsight Systems to see both paths in the same timeline — the C++ path appears as tight cuBLAS ranges; the CuPy path as nvrtc JIT compilation followed by cuBLAS.
+
 ## Design notes
 
-- **Tensor contractions** are routed through the `tensor_ops` dispatcher (`include/cupyccx/tensor_ops.hpp`). CPU calls use CBLAS; GPU calls use cuBLAS DGEMM and fall back to CPU loops where a DGEMM reformulation requires a tensor transpose not yet implemented.
+- **Tensor contractions** are routed through the `tensor_ops` dispatcher (`include/cupyccx/tensor_ops.hpp`). CPU calls use CBLAS; GPU calls use cuBLAS DGEMM.
 - **DIIS** extrapolation is on by default (`CCOptions.use_diis = True`, up to 6 vectors).
 - **MP2 amplitudes** are used as the initial guess for T₂.
 - The Python `CCOptions` dataclass mirrors the C++ `CCOptions` struct and is converted by `_to_ext()` before being passed to the compiled extension.
