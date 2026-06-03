@@ -30,15 +30,21 @@ except ImportError:
 from cupyccx.method import CCD, LCCD, DCD, pCCD
 from cupyccx.scf_data import SCFInputData, prepare_from_pyscf
 from cupyccx.pyscf_interface import run_from_pyscf
+from cupyccx.py_solver import PyCCD, PyLCCD, PyDCD, PypCCD
 
 __all__ = [
-    # Solvers
+    # C++ solvers
     "CCD",
     "LCCD",
     "DCD",
     "pCCD",
     "CCOptions",
     "CCResult",
+    # Pure-Python solvers (debugging reference)
+    "PyCCD",
+    "PyLCCD",
+    "PyDCD",
+    "PypCCD",
     # Integral extraction
     "SCFInputData",
     "prepare_from_pyscf",

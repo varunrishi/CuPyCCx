@@ -18,6 +18,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=7", "pytest-cov"]
+gpu-py = ["cupy-cuda12x>=12.0"]  # install cupy-cuda11x for CUDA 11
 
 [project.urls]
 Homepage   = "https://github.com/varunrishi/cupyccx"
