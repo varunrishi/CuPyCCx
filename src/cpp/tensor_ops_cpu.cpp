@@ -48,8 +48,10 @@ void finalize() {
 
 bool gpu_active() { return s_gpu; }
 
-// No-op on CPU — only the CUDA backend uploads to device memory.
+// No-op on CPU-only builds; the CUDA backend provides the real implementation.
+#ifndef CUPYCCX_CUDA
 void gpu_upload_integrals(const Tensor4&, const Tensor4&, const Tensor4&, const void*) {}
+#endif
 
 // Stub: public dgemm symbol required by the header; only the CUDA backend
 // provides a real implementation via cuBLAS.
