@@ -13,9 +13,15 @@ or Nsight Compute (single-kernel metrics):
         -o cupyccx_ncu \\
         python examples/profile_gpu.py
 
-The script runs a fixed number of CCD iterations (not to convergence) on
+The script runs a fixed number of iterations (not to convergence) on
 progressively larger systems so that the profiler captures a representative
 mix of DGEMM sizes and host↔device transfer overhead.
+
+Both CCD and DCD are profiled:
+  - DCD uses bare (static) W_vvvv/W_oooo uploaded once per molecule via
+    gpu_upload_integrals() — exercising the integral-caching path.
+  - CCD uses dressed W_vvvv (rebuilt from T2 each iteration) — re-uploads
+    every call and builds the tensor on CPU, showing the heavier pattern.
 
 Prerequisites:
     pip install pyscf
@@ -26,7 +32,7 @@ import time
 
 from pyscf import gto, scf
 from cupyccx.scf_data import prepare_from_pyscf
-from cupyccx.method import CCD, CCOptions
+from cupyccx.method import CCD, DCD, CCOptions
 
 PROFILE_ITERS = 5   # fixed iteration count — do not converge
 
@@ -48,7 +54,7 @@ def run_fixed(cls, data, n_iter, label):
     t0 = time.perf_counter()
     r  = cls.from_scf_data(data, opts=opts).compute(e_scf=data.e_scf, verbose=False)
     dt = time.perf_counter() - t0
-    print(f"  {label:30s}  n_occ={data.n_occ:3d}  n_vir={data.n_vir:3d}"
+    print(f"  {label:38s}  n_occ={data.n_occ:3d}  n_vir={data.n_vir:3d}"
           f"  {n_iter} iters  {dt:.3f}s")
 
 def main():
@@ -59,15 +65,16 @@ def main():
     ]
 
     print(f"Running {PROFILE_ITERS} GPU iterations per system")
-    print(f"{'System':<30}  {'n_occ':>5}  {'n_vir':>5}  {'iters':>5}  {'wall':>8}")
-    print("-" * 65)
+    print(f"{'Method + System':<38}  {'n_occ':>5}  {'n_vir':>5}  {'iters':>5}  {'wall':>8}")
+    print("-" * 75)
 
     for basis, label in systems:
         mol  = build_mol(basis)
         mf   = scf.RHF(mol).run()
         data = prepare_from_pyscf(mf, verbose=False)
 
-        run_fixed(CCD, data, PROFILE_ITERS, label)
+        run_fixed(CCD, data, PROFILE_ITERS, f"CCD  {label}")
+        run_fixed(DCD, data, PROFILE_ITERS, f"DCD  {label}")
 
     print("\nDone. Open the .nsys-rep file in Nsight Systems to inspect the timeline.")
 
