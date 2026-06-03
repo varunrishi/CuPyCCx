@@ -129,6 +129,28 @@ __global__ void k_scatter_0213(const double* __restrict__ R_tilde,
     R[idx] += R_tilde[tilde_idx];
 }
 
+// Full P(ij)P(ab) antisymmetrization of R_tilde[i,a,j,b].
+// R[i,j,a,b] += R_tilde[i,a,j,b] - R_tilde[i,b,j,a]
+//             - R_tilde[j,a,i,b] + R_tilde[j,b,i,a]
+__global__ void k_scatter_Pijab(const double* __restrict__ R_tilde,
+                                 double*       __restrict__ R,
+                                 int o, int v)
+{
+    int n   = o * o * v * v;
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= n) return;
+
+    int b = idx % v;           int tmp = idx / v;
+    int a = tmp % v;               tmp /= v;
+    int j = tmp % o;
+    int i = tmp / o;
+
+    R[idx] += R_tilde[((i * v + a) * o + j) * v + b]
+            - R_tilde[((i * v + b) * o + j) * v + a]
+            - R_tilde[((j * v + a) * o + i) * v + b]
+            + R_tilde[((j * v + b) * o + i) * v + a];
+}
+
 namespace tensor_ops {
 
 // ---------------------------------------------------------------------------
@@ -270,6 +292,55 @@ void gpu_contract_kbcj_ikac(const Tensor4& W, const Tensor4& T2,
                              s_d_R_ring.ptr, ov));
 
     k_scatter_0213<<<blocks, threads>>>(s_d_R_ring.ptr, s_d_R.ptr, o, v);
+
+    s_d_R.download(R.ptr(), oovv);
+}
+
+// ---------------------------------------------------------------------------
+// Full P(ij)P(ab) ring: R[i,j,a,b] += alpha * P(ij)P(ab) sum_{kc} W[k,b,c,j]*T2[i,k,a,c]
+//
+// Same permute+DGEMM as gpu_contract_kbcj_ikac, but the scatter applies all four
+// antisymmetry terms at once (k_scatter_Pijab) instead of just the base term.
+// ---------------------------------------------------------------------------
+void gpu_contract_kbcj_ikac_Pijab(const Tensor4& W, const Tensor4& T2,
+                                    Tensor4& R, double alpha) {
+    const int o  = static_cast<int>(T2.n0);
+    const int v  = static_cast<int>(T2.n2);
+    const int ov = o * v;
+    const int oo = o * o, vv = v * v, oovv = oo * vv;
+
+    ensure(s_d_W_ovvo, oovv);
+    ensure(s_d_W_T,    oovv);
+    ensure(s_d_T2_ov,  oovv);
+    ensure(s_d_T2_T,   oovv);
+    ensure(s_d_R_ring, oovv);
+    ensure(s_d_R,      oovv);
+
+    s_d_W_ovvo.upload(W.ptr(),   oovv);
+    s_d_T2_ov.upload(T2.ptr(),   oovv);
+    s_d_R.upload(R.ptr(),        oovv);
+
+    const int threads = 256;
+    const int blocks  = (oovv + threads - 1) / threads;
+
+    k_permute4d<<<blocks, threads>>>(s_d_T2_ov.ptr, s_d_T2_T.ptr,
+                                     o, o, v, v,
+                                     0, 2, 1, 3);
+    k_permute4d<<<blocks, threads>>>(s_d_W_ovvo.ptr, s_d_W_T.ptr,
+                                     o, v, v, o,
+                                     0, 2, 3, 1);
+
+    const double zero = 0.0;
+    CUBLAS_CHECK(cublasDgemm(s_handle->handle,
+                             CUBLAS_OP_N, CUBLAS_OP_N,
+                             ov, ov, ov,
+                             &alpha,
+                             s_d_W_T.ptr,  ov,
+                             s_d_T2_T.ptr, ov,
+                             &zero,
+                             s_d_R_ring.ptr, ov));
+
+    k_scatter_Pijab<<<blocks, threads>>>(s_d_R_ring.ptr, s_d_R.ptr, o, v);
 
     s_d_R.download(R.ptr(), oovv);
 }

@@ -165,6 +165,38 @@ void contract_abcd_ijcd(const Tensor4& W, const Tensor4& T2,
 }
 
 // ---------------------------------------------------------------------------
+// R[i,j,a,b] += alpha * P(ij)P(ab) sum_{kc} W[k,b,c,j] * T2[i,k,a,c]
+// GPU: single DGEMM + k_scatter_Pijab. CPU: explicit four-term loop.
+// ---------------------------------------------------------------------------
+void contract_kbcj_ikac_Pijab(const Tensor4& W, const Tensor4& T2,
+                               Tensor4& R, real_t alpha) {
+#ifdef CUPYCCX_CUDA
+    if (s_gpu) {
+        extern void gpu_contract_kbcj_ikac_Pijab(const Tensor4&, const Tensor4&,
+                                                  Tensor4&, real_t);
+        gpu_contract_kbcj_ikac_Pijab(W, T2, R, alpha);
+        return;
+    }
+#endif
+    const int o = static_cast<int>(T2.n0);
+    const int v = static_cast<int>(T2.n2);
+    for (int i = 0; i < o; ++i)
+    for (int j = 0; j < o; ++j)
+    for (int a = 0; a < v; ++a)
+    for (int b = 0; b < v; ++b) {
+        real_t s = 0.0;
+        for (int k = 0; k < o; ++k)
+        for (int c = 0; c < v; ++c) {
+            s += W(k, b, c, j) * T2(i, k, a, c)
+               - W(k, a, c, j) * T2(i, k, b, c)
+               - W(k, b, c, i) * T2(j, k, a, c)
+               + W(k, a, c, i) * T2(j, k, b, c);
+        }
+        R(i, j, a, b) += alpha * s;
+    }
+}
+
+// ---------------------------------------------------------------------------
 // R[i,j,a,b] += alpha * sum_{kc}  W[k,b,c,j] * T2[i,k,a,c]
 // ---------------------------------------------------------------------------
 void contract_kbcj_ikac(const Tensor4& W, const Tensor4& T2,

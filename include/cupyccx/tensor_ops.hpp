@@ -72,6 +72,14 @@ void contract_kbcj_ikac(const Tensor4& W_ovvo,
                         Tensor4&       result,
                         real_t         alpha = 1.0);
 
+// result[i,j,a,b] += alpha * P(ij)P(ab) sum_{kc} W_ovvo[k,b,c,j] * T2[i,k,a,c]
+//   Full antisymmetric ring: all four permutation terms in one GPU DGEMM + scatter.
+//   GPU: single permute+DGEMM+k_scatter_Pijab pass. CPU: explicit four-term loop.
+void contract_kbcj_ikac_Pijab(const Tensor4& W_ovvo,
+                               const Tensor4& T2,
+                               Tensor4&       result,
+                               real_t         alpha = 1.0);
+
 // R[i,j,a,b] += alpha * sum_{kl,cd} oovv[k,l,c,d] * t2[k,l,a,b] * t2[i,j,c,d]
 // GPU-only: two DGEMMs (form M[v²,v²]=T2^T@oovv, then M@T2 into R).
 // In CCD GPU path, call with alpha=0.25 to replace both build_W_vvvv and

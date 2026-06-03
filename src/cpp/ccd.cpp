@@ -97,21 +97,8 @@ real_t CCD::build_residual(const Tensor4& t2,
     // (1/2) W_{abcd} t_{ij}^{cd}  — W = bare <ab||cd> for LCCD
     tensor_ops::contract_abcd_ijcd(W_vvvv, t2, R, 0.5);
 
-    // P(ij)P(ab) <kb||cj> t_{ik}^{ac}  (four permutation terms)
-    for (int i = 0; i < o; ++i)
-    for (int j = 0; j < o; ++j)
-    for (int a = 0; a < v; ++a)
-    for (int b = 0; b < v; ++b) {
-        real_t s = 0.0;
-        for (int k = 0; k < o; ++k)
-        for (int c = 0; c < v; ++c) {
-            s += ovvo(k, b, c, j) * t2(i, k, a, c)   // +1
-               - ovvo(k, a, c, j) * t2(i, k, b, c)   // P(ab) -> -1
-               - ovvo(k, b, c, i) * t2(j, k, a, c)   // P(ij) -> -1
-               + ovvo(k, a, c, i) * t2(j, k, b, c);  // P(ij)P(ab) -> +1
-        }
-        R(i, j, a, b) += s;
-    }
+    // P(ij)P(ab) <kb||cj> t_{ik}^{ac}
+    tensor_ops::contract_kbcj_ikac_Pijab(ovvo, t2, R, 1.0);
 
     // Q_D: (1/2) P(ij)P(ab) sum_{klcd} <kl||cd> t_{ik}^{ac} t_{jl}^{bd}
     // (quadratic ring-ring from dressed W_{mbej} intermediate; CCD only)
@@ -503,20 +490,7 @@ static real_t build_linear_residual(
     tensor_ops::contract_abcd_ijcd(vvvv, t2, R, 0.5);
 
     // P(ij)P(ab) <kb||cj> t_{ik}^{ac}  (bare ring)
-    for (int i = 0; i < o; ++i)
-    for (int j = 0; j < o; ++j)
-    for (int a = 0; a < v; ++a)
-    for (int b = 0; b < v; ++b) {
-        real_t s = 0.0;
-        for (int k = 0; k < o; ++k)
-        for (int c = 0; c < v; ++c) {
-            s += ovvo(k, b, c, j) * t2(i, k, a, c)
-               - ovvo(k, a, c, j) * t2(i, k, b, c)
-               - ovvo(k, b, c, i) * t2(j, k, a, c)
-               + ovvo(k, a, c, i) * t2(j, k, b, c);
-        }
-        R(i, j, a, b) += s;
-    }
+    tensor_ops::contract_kbcj_ikac_Pijab(ovvo, t2, R, 1.0);
 
     real_t rms = 0.0;
     for (auto x : R.data) rms += x * x;
