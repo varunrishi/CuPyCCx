@@ -28,6 +28,10 @@ static cuda_utils::DeviceBuffer<double> s_d_W_oooo;   // W[k,l,i,j]
 static cuda_utils::DeviceBuffer<double> s_d_T2;
 static cuda_utils::DeviceBuffer<double> s_d_R;
 
+// Buffers for contract_oovv_t2_t2 (CCD Q_B GPU path)
+static cuda_utils::DeviceBuffer<double> s_d_oovv;     // <ij||ab> occ-occ-vir-vir
+static cuda_utils::DeviceBuffer<double> s_d_M_vvvv;   // M[ab,cd] intermediate
+
 // Persistent buffers for ring contraction (kbcj_ikac)
 static cuda_utils::DeviceBuffer<double> s_d_W_ovvo;
 static cuda_utils::DeviceBuffer<double> s_d_W_T;
@@ -61,6 +65,8 @@ void gpu_backend_finalize() {
     s_d_W_oooo = cuda_utils::DeviceBuffer<double>();
     s_d_T2     = cuda_utils::DeviceBuffer<double>();
     s_d_R      = cuda_utils::DeviceBuffer<double>();
+    s_d_oovv   = cuda_utils::DeviceBuffer<double>();
+    s_d_M_vvvv = cuda_utils::DeviceBuffer<double>();
     s_d_W_ovvo = cuda_utils::DeviceBuffer<double>();
     s_d_W_T    = cuda_utils::DeviceBuffer<double>();
     s_d_T2_ov  = cuda_utils::DeviceBuffer<double>();
@@ -266,6 +272,57 @@ void gpu_contract_kbcj_ikac(const Tensor4& W, const Tensor4& T2,
     k_scatter_0213<<<blocks, threads>>>(s_d_R_ring.ptr, s_d_R.ptr, o, v);
 
     s_d_R.download(R.ptr(), oovv);
+}
+
+// ---------------------------------------------------------------------------
+// CCD Q_B correction: R[i,j,a,b] += alpha * sum_{kl,cd} oovv[k,l,c,d] * t2[k,l,a,b] * t2[i,j,c,d]
+//
+// Computed as two DGEMMs:
+//   Step 1  M[ab,cd]  = sum_{kl} t2[kl,ab] * oovv[kl,cd]  (oovv^T × T2^T in col-major)
+//   Step 2  R[ij,ab] += alpha * sum_{cd} M[ab,cd] * t2[ij,cd]  (reuses contract_abcd_ijcd DGEMM)
+//
+// Replaces the CPU build_W_vvvv + build_W_oooo T2 corrections on the GPU path.
+// Call with alpha=0.25 to account for both the vvvv and oooo W corrections (each 1/8).
+// ---------------------------------------------------------------------------
+void gpu_contract_oovv_t2_t2(const Tensor4& oovv, const Tensor4& T2,
+                               Tensor4& R, double alpha) {
+    const int o  = static_cast<int>(T2.n0);
+    const int v  = static_cast<int>(T2.n2);
+    const int oo = o * o, vv = v * v, oovv_n = oo * vv;
+
+    ensure(s_d_oovv,   oovv_n);
+    ensure(s_d_M_vvvv, (std::size_t)vv * vv);
+    ensure(s_d_T2,     oovv_n);
+    ensure(s_d_R,      oovv_n);
+
+    s_d_oovv.upload(oovv.ptr(), oovv_n);
+    s_d_T2.upload(T2.ptr(),     oovv_n);
+    s_d_R.upload(R.ptr(),       oovv_n);
+
+    const double zero = 0.0, one = 1.0;
+
+    // Step 1: M^T[ab,cd] = oovv_col(vv×oo) × T2_col^T(oo×vv)
+    // Result in M_ptr (row-major vv×vv) = M[ab,cd] = sum_{kl} t2[kl,ab]*oovv[kl,cd] ✓
+    CUBLAS_CHECK(cublasDgemm(s_handle->handle,
+                             CUBLAS_OP_N, CUBLAS_OP_T,
+                             vv, vv, oo,
+                             &one,
+                             s_d_oovv.ptr, vv,
+                             s_d_T2.ptr,   vv,
+                             &zero,
+                             s_d_M_vvvv.ptr, vv));
+
+    // Step 2: R[ij,ab] += alpha * sum_{cd} M[ab,cd] * T2[ij,cd]  (same DGEMM as contract_abcd_ijcd)
+    CUBLAS_CHECK(cublasDgemm(s_handle->handle,
+                             CUBLAS_OP_T, CUBLAS_OP_N,
+                             vv, oo, vv,
+                             &alpha,
+                             s_d_M_vvvv.ptr, vv,
+                             s_d_T2.ptr,     vv,
+                             &one,
+                             s_d_R.ptr,      vv));
+
+    s_d_R.download(R.ptr(), oovv_n);
 }
 
 }  // namespace tensor_ops

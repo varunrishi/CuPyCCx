@@ -72,6 +72,13 @@ void contract_kbcj_ikac(const Tensor4& W_ovvo,
                         Tensor4&       result,
                         real_t         alpha = 1.0);
 
+// R[i,j,a,b] += alpha * sum_{kl,cd} oovv[k,l,c,d] * t2[k,l,a,b] * t2[i,j,c,d]
+// GPU-only: two DGEMMs (form M[v²,v²]=T2^T@oovv, then M@T2 into R).
+// In CCD GPU path, call with alpha=0.25 to replace both build_W_vvvv and
+// build_W_oooo T2 corrections (each contributes 1/8 → total 1/4).
+void contract_oovv_t2_t2(const Tensor4& oovv, const Tensor4& t2,
+                          Tensor4& R, real_t alpha);
+
 // General batched DGEMM used internally by the GPU backend
 // C = alpha * A * B + beta * C  (row-major)
 void dgemm(int M, int N, int K,

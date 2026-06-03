@@ -232,10 +232,22 @@ CCResult CCD::compute(real_t e_scf) {
     result.converged = false;
 
     for (int iter = 1; iter <= opts_.max_iter; ++iter) {
-        build_W_oooo(oooo, oovv, t2, W_oooo);
-        build_W_vvvv(vvvv, oovv, t2, W_vvvv);
-
-        real_t rms = build_residual(t2, oovv, W_vvvv, W_oooo, ovvo, F_vv, F_oo, residual);
+        real_t rms;
+        if (tensor_ops::gpu_active()) {
+            // GPU path: pass bare vvvv/oooo (cached on device) directly — skip CPU W build.
+            // Q_B (T2 correction to both W tensors) is added via a separate GPU DGEMM pair.
+            rms = build_residual(t2, oovv, vvvv, oooo, ovvo, F_vv, F_oo, residual);
+            if (variant_ != "LCCD") {
+                tensor_ops::contract_oovv_t2_t2(oovv, t2, residual, 0.25);
+                real_t sum = 0.0;
+                for (auto x : residual.data) sum += x * x;
+                rms = std::sqrt(sum / residual.data.size());
+            }
+        } else {
+            build_W_oooo(oooo, oovv, t2, W_oooo);
+            build_W_vvvv(vvvv, oovv, t2, W_vvvv);
+            rms = build_residual(t2, oovv, W_vvvv, W_oooo, ovvo, F_vv, F_oo, residual);
+        }
 
         Tensor4 new_t2(o, o, v, v);
         for (std::size_t n = 0; n < t2.data.size(); ++n)
