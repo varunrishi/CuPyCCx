@@ -114,6 +114,28 @@ if(OpenMP_CXX_FOUND)
 endif()
 
 # ---------------------------------------------------------------------------
+# Optional BLAS/CBLAS linkage — enables DGEMM fast paths in tensor_ops_cpu.cpp
+# ---------------------------------------------------------------------------
+find_package(BLAS)
+if(BLAS_FOUND)
+    target_link_libraries(cupyccx_core PUBLIC ${BLAS_LIBRARIES})
+    if(APPLE)
+        # macOS Accelerate framework bundles cblas.h; ACCELERATE_NEW_LAPACK silences
+        # the "first deprecated in macOS 13.3" warning on the old cblas_dgemm symbol.
+        target_compile_definitions(cupyccx_core PRIVATE
+            CUPYCCX_HAVE_CBLAS CUPYCCX_BLAS_ACCELERATE ACCELERATE_NEW_LAPACK)
+    else()
+        find_path(_cblas_inc cblas.h
+            PATHS /usr/include /usr/local/include
+            PATH_SUFFIXES openblas x86_64-linux-gnu)
+        if(_cblas_inc)
+            target_include_directories(cupyccx_core PRIVATE ${_cblas_inc})
+            target_compile_definitions(cupyccx_core PRIVATE CUPYCCX_HAVE_CBLAS)
+        endif()
+    endif()
+endif()
+
+# ---------------------------------------------------------------------------
 # CUDA library (compiled only when CUPYCCX_CUDA=ON)
 # ---------------------------------------------------------------------------
 if(CUPYCCX_CUDA)

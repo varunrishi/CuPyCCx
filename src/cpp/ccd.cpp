@@ -5,6 +5,14 @@
 #include <iostream>
 #include <stdexcept>
 
+#ifdef CUPYCCX_HAVE_CBLAS
+#  ifdef CUPYCCX_BLAS_ACCELERATE
+#    include <Accelerate/Accelerate.h>
+#  else
+#    include <cblas.h>
+#  endif
+#endif
+
 namespace cupyccx {
 
 // ============================================================
@@ -18,7 +26,17 @@ void CCD::build_W_oooo(const Tensor4& oooo,
     W_oooo = oooo;
     if (variant_ == "LCCD") return;  // LCCD: no T2 contribution
     const int o = scf_.n_occ, v = scf_.n_vir;
-    // W_{klij} += (1/4) sum_{cd} <kl||cd> t_{ij}^{cd}
+    const int oo = o * o, vv = v * v;
+    // W[(kl),(ij)] += 0.25 * oovv[(kl),(cd)] @ t2^T[(ij),(cd)]
+    // Both oovv and t2 have their (kl)/(ij) pair as the leading (o²) block.
+#ifdef CUPYCCX_HAVE_CBLAS
+    cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasTrans,
+                oo, oo, vv,
+                0.25, oovv.ptr(), vv,
+                t2.ptr(), vv,
+                1.0, W_oooo.ptr(), oo);
+#else
+    // Reference: explicit loop
     for (int k = 0; k < o; ++k)
     for (int l = 0; l < o; ++l)
     for (int i = 0; i < o; ++i)
@@ -29,6 +47,7 @@ void CCD::build_W_oooo(const Tensor4& oooo,
             s += oovv(k, l, c, d) * t2(i, j, c, d);
         W_oooo(k, l, i, j) += 0.25 * s;
     }
+#endif
 }
 
 void CCD::build_W_vvvv(const Tensor4& vvvv,
@@ -38,7 +57,17 @@ void CCD::build_W_vvvv(const Tensor4& vvvv,
     W_vvvv = vvvv;
     if (variant_ == "LCCD") return;  // LCCD: no T2 contribution
     const int o = scf_.n_occ, v = scf_.n_vir;
-    // W_{abcd} += (1/4) sum_{kl} <kl||cd> t_{kl}^{ab}
+    const int oo = o * o, vv = v * v;
+    // W[(ab),(cd)] += 0.25 * t2^T[(ab),(kl)] @ oovv[(kl),(cd)]
+    // t2 is stored as (kl, ab) = (oo, vv); transposing gives (ab, kl).
+#ifdef CUPYCCX_HAVE_CBLAS
+    cblas_dgemm(CblasRowMajor, CblasTrans, CblasNoTrans,
+                vv, vv, oo,
+                0.25, t2.ptr(), vv,
+                oovv.ptr(), vv,
+                1.0, W_vvvv.ptr(), vv);
+#else
+    // Reference: explicit loop
     for (int a = 0; a < v; ++a)
     for (int b = 0; b < v; ++b)
     for (int c = 0; c < v; ++c)
@@ -49,6 +78,7 @@ void CCD::build_W_vvvv(const Tensor4& vvvv,
             s += oovv(k, l, c, d) * t2(k, l, a, b);
         W_vvvv(a, b, c, d) += 0.25 * s;
     }
+#endif
 }
 
 real_t CCD::build_residual(const Tensor4& t2,
