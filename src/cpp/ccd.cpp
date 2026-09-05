@@ -122,6 +122,12 @@ real_t CCD::build_residual(const Tensor4& t2,
     }
 
     // Q_B: These two below terms constitute B
+    // Keep T2/R device-resident across all three contractions instead of
+    // round-tripping them through the host on every call (see
+    // gpu_begin_residual). No-op on the CPU path.
+    if (tensor_ops::gpu_active())
+        tensor_ops::gpu_begin_residual(t2, R);
+
     // (1/2) W_{klij} t_{kl}^{ab}  — W = bare <kl||ij> for LCCD
     tensor_ops::contract_klij_klab(W_oooo, t2, R, 0.5);
 
@@ -130,6 +136,9 @@ real_t CCD::build_residual(const Tensor4& t2,
 
     // P(ij)P(ab) <kb||cj> t_{ik}^{ac}
     tensor_ops::contract_kbcj_ikac_Pijab(ovvo, t2, R, 1.0);
+
+    if (tensor_ops::gpu_active())
+        tensor_ops::gpu_end_residual(R);
 
     if (variant_ != "LCCD") {
         // Q_D: (1/2) P(ij)P(ab) sum_{klcd} <kl||cd> t_{ik}^{ac} t_{jl}^{bd}
@@ -233,8 +242,12 @@ CCResult CCD::compute(real_t e_scf) {
     auto ovvo = slice_ovvo(scf_);
     auto D2   = make_D2(scf_);
 
-    if (tensor_ops::gpu_active())
+    if (tensor_ops::gpu_active()) {
         tensor_ops::gpu_upload_integrals(vvvv, oooo, ovvo, scf_.eri_antisym.ptr());
+        // LCCD never calls contract_oovv_t2_t2/contract_qD_Pijab — skip the upload.
+        if (variant_ != "LCCD")
+            tensor_ops::gpu_upload_oovv(oovv, scf_.eri_antisym.ptr());
+    }
 
     Matrix F_vv = scf_.fock.block(o, o, v, v);
     Matrix F_oo = scf_.fock.block(0, 0, o, o);
@@ -259,8 +272,13 @@ CCResult CCD::compute(real_t e_scf) {
             rms = build_residual(t2, oovv, vvvv, oooo, ovvo, F_vv, F_oo, residual,
                                  /*skip_quadratic=*/true);
             if (variant_ != "LCCD") {
+                // Second device-resident session: T2 is uploaded once and the
+                // Q_B/Q_D contributions accumulate directly on the device
+                // before a single download, instead of two more round-trips.
+                tensor_ops::gpu_begin_residual(t2, residual);
                 tensor_ops::contract_oovv_t2_t2(oovv, t2, residual, 0.25); // Q_B
                 tensor_ops::contract_qD_Pijab(oovv, t2, residual, 0.5);    // Q_D
+                tensor_ops::gpu_end_residual(residual);
                 real_t sum = 0.0;
                 for (auto x : residual.data) sum += x * x;
                 rms = std::sqrt(sum / residual.data.size());
@@ -518,6 +536,11 @@ static real_t build_linear_residual(
         R(i, j, a, b) -= sij - sji;
     }
 
+    // Keep T2/R device-resident across all three contractions instead of
+    // round-tripping them through the host on every call. No-op on CPU path.
+    if (tensor_ops::gpu_active())
+        tensor_ops::gpu_begin_residual(t2, R);
+
     // (1/2) <kl||ij> t_{kl}^{ab}  (bare hole-hole ladder)
     tensor_ops::contract_klij_klab(oooo, t2, R, 0.5);
 
@@ -526,6 +549,9 @@ static real_t build_linear_residual(
 
     // P(ij)P(ab) <kb||cj> t_{ik}^{ac}  (bare ring)
     tensor_ops::contract_kbcj_ikac_Pijab(ovvo, t2, R, 1.0);
+
+    if (tensor_ops::gpu_active())
+        tensor_ops::gpu_end_residual(R);
 
     real_t rms = 0.0;
     for (auto x : R.data) rms += x * x;

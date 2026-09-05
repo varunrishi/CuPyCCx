@@ -61,6 +61,9 @@ bool gpu_active() { return s_gpu; }
 // No-op on CPU-only builds; the CUDA backend provides the real implementation.
 #ifndef CUPYCCX_CUDA
 void gpu_upload_integrals(const Tensor4&, const Tensor4&, const Tensor4&, const void*) {}
+void gpu_upload_oovv(const Tensor4&, const void*) {}
+void gpu_begin_residual(const Tensor4&, const Tensor4&) {}
+void gpu_end_residual(Tensor4&) {}
 #endif
 
 // Stub: public dgemm symbol required by the header; only the CUDA backend

@@ -31,6 +31,23 @@ void gpu_upload_integrals(const Tensor4& vvvv,
                           const Tensor4& ovvo,
                           const void*    cache_key);
 
+// Pre-upload the bare oovv integral used by the CCD-only Q_B/Q_D GPU path
+// (contract_oovv_t2_t2 / contract_qD_Pijab). Same cache_key convention as
+// gpu_upload_integrals. Call once before the iteration loop.
+void gpu_upload_oovv(const Tensor4& oovv, const void* cache_key);
+
+// Begin a device-resident accumulation session for one residual build: T2 is
+// uploaded once and the device residual buffer is seeded from R's current
+// (host) value. Contractions called between gpu_begin_residual/gpu_end_residual
+// accumulate directly on the device instead of re-uploading T2 and
+// round-tripping R through the host on every single call. No-op when the GPU
+// backend is not active.
+void gpu_begin_residual(const Tensor4& t2, const Tensor4& R);
+
+// End the session started by gpu_begin_residual: downloads the accumulated
+// device residual back into R. No-op when the GPU backend is not active.
+void gpu_end_residual(Tensor4& R);
+
 // ---------------------------------------------------------------------------
 // Core contractions used by the CCD/LCCD residual equations
 // All arrays are assumed to be contiguous, row-major (C order).
