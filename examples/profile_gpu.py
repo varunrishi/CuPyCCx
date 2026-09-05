@@ -30,8 +30,18 @@ in the Nsight Systems timeline (look for nvrtc / cuBLAS ranges).
 Prerequisites:
     pip install pyscf cupy-cuda12x   # or cupy-cuda11x for CUDA 11
     pip install -e . -C cmake.define.CUPYCCX_CUDA=ON -C cmake.define.CUPYCCX_CUDA_ARCH=<arch>
+
+Use --basis/--impl to scope a run to a single system/implementation — this
+is what lets you capture separate Nsight reports per implementation instead
+of interleaving C++ and CuPy ranges in one shared timeline:
+
+    nsys profile --trace=cuda,cublas,osrt --output=ccpvtz_cpp \\
+        python examples/profile_gpu.py --basis cc-pVTZ --impl cpp
+    nsys profile --trace=cuda,cublas,osrt --output=ccpvtz_cupy \\
+        python examples/profile_gpu.py --basis cc-pVTZ --impl cupy
 """
 
+import argparse
 import time
 import warnings
 
@@ -85,14 +95,26 @@ def run_fixed_py(cls, data, n_iter, label, **kwargs):
     print(f"  {label:42s}  n_occ={data.n_occ:3d}  n_vir={data.n_vir:3d}"
           f"  {n_iter} iters  {dt:.3f}s")
 
+def parse_args():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--basis", choices=["sto-3g", "cc-pVDZ", "cc-pVTZ", "all"],
+                         default="all", help="restrict the run to one system (default: all)")
+    parser.add_argument("--impl", choices=["cpp", "cupy", "both"],
+                         default="both", help="restrict the run to one implementation (default: both)")
+    return parser.parse_args()
+
 def main():
+    args = parse_args()
+
     systems = [
         ("sto-3g",  "N2/STO-3G  (small)"),
         ("cc-pVDZ", "N2/cc-pVDZ (medium)"),
         ("cc-pVTZ", "N2/cc-pVTZ (large)"),
     ]
+    if args.basis != "all":
+        systems = [s for s in systems if s[0] == args.basis]
 
-    print(f"Running {PROFILE_ITERS} GPU iterations per system")
+    print(f"Running {PROFILE_ITERS} GPU iterations per system  (basis={args.basis}, impl={args.impl})")
     print(f"{'Method + System':<42}  {'n_occ':>5}  {'n_vir':>5}  {'iters':>5}  {'wall':>8}")
     print("-" * 79)
 
@@ -101,9 +123,10 @@ def main():
         mf   = scf.RHF(mol).run()
         data = prepare_from_pyscf(mf, verbose=False)
 
-        run_fixed_cpp(CCD,  data, PROFILE_ITERS, f"C++  CCD  {label}")
-        # run_fixed_cpp(DCD,  data, PROFILE_ITERS, f"C++  DCD  {label}")
-        if _CUPY_OK:
+        if args.impl in ("cpp", "both"):
+            run_fixed_cpp(CCD,  data, PROFILE_ITERS, f"C++  CCD  {label}")
+            # run_fixed_cpp(DCD,  data, PROFILE_ITERS, f"C++  DCD  {label}")
+        if args.impl in ("cupy", "both") and _CUPY_OK:
             run_fixed_py(PyCCD, data, PROFILE_ITERS, f"CuPy CCD  {label}")
             # run_fixed_py(PyDCD, data, PROFILE_ITERS, f"CuPy DCD  {label}")
         print()
